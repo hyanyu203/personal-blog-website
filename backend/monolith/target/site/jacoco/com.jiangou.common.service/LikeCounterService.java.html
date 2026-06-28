@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LikeCounterService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.common.service</a> &gt; <span class="el_source">LikeCounterService.java</span></div><h1>LikeCounterService.java</h1><pre class="source lang-java linenums">package com.jiangou.common.service;
+
+import com.jiangou.common.exception.UnauthorizedException;
+import com.jiangou.common.exception.ValidationException;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+@Service
+public class LikeCounterService {
+
+    private static final String COUNT_PREFIX = &quot;counter:&quot;;
+    private static final String DEDUP_PREFIX = &quot;like:&quot;;
+    private static final String DIRTY_SET = &quot;counter:dirty&quot;;
+
+    private final StringRedisTemplate redisTemplate;
+
+<span class="nc" id="L23">    public LikeCounterService(StringRedisTemplate redisTemplate) {</span>
+<span class="nc" id="L24">        this.redisTemplate = redisTemplate;</span>
+<span class="nc" id="L25">    }</span>
+
+    public long incrementByUser(String type, Long id, Long userId, long dbFallback) {
+<span class="nc bnc" id="L28" title="All 2 branches missed.">        if (userId == null) {</span>
+<span class="nc" id="L29">            throw new UnauthorizedException(&quot;未登录&quot;);</span>
+        }
+<span class="nc" id="L31">        String dedupKey = DEDUP_PREFIX + type + &quot;:&quot; + id + &quot;:user:&quot; + userId;</span>
+<span class="nc" id="L32">        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(dedupKey, &quot;1&quot;, 30, TimeUnit.DAYS);</span>
+<span class="nc bnc" id="L33" title="All 2 branches missed.">        if (!Boolean.TRUE.equals(acquired)) {</span>
+<span class="nc" id="L34">            throw new ValidationException(&quot;已经点赞过了&quot;);</span>
+        }
+<span class="nc" id="L36">        String countKey = COUNT_PREFIX + type + &quot;:&quot; + id;</span>
+        try {
+<span class="nc bnc" id="L38" title="All 4 branches missed.">            if (!Boolean.TRUE.equals(redisTemplate.hasKey(countKey)) &amp;&amp; dbFallback &gt; 0) {</span>
+<span class="nc" id="L39">                redisTemplate.opsForValue().set(countKey, String.valueOf(dbFallback));</span>
+            }
+<span class="nc" id="L41">            Long count = redisTemplate.opsForValue().increment(countKey);</span>
+<span class="nc" id="L42">            redisTemplate.opsForSet().add(DIRTY_SET, type + &quot;:&quot; + id);</span>
+<span class="nc bnc" id="L43" title="All 2 branches missed.">            return count == null ? 1L : count;</span>
+<span class="nc" id="L44">        } catch (RuntimeException e) {</span>
+<span class="nc" id="L45">            redisTemplate.delete(dedupKey);</span>
+<span class="nc" id="L46">            throw e;</span>
+        }
+    }
+
+    public long getCount(String type, Long id, long dbFallback) {
+<span class="nc" id="L51">        String countKey = COUNT_PREFIX + type + &quot;:&quot; + id;</span>
+<span class="nc" id="L52">        String val = redisTemplate.opsForValue().get(countKey);</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">        if (val != null) {</span>
+<span class="nc" id="L54">            return Long.parseLong(val);</span>
+        }
+<span class="nc bnc" id="L56" title="All 2 branches missed.">        if (dbFallback &gt; 0) {</span>
+<span class="nc" id="L57">            redisTemplate.opsForValue().set(countKey, String.valueOf(dbFallback));</span>
+        }
+<span class="nc" id="L59">        return dbFallback;</span>
+    }
+
+    public Map&lt;Long, Long&gt; getCounts(String type, List&lt;Long&gt; ids, Map&lt;Long, Long&gt; dbFallbacks) {
+<span class="nc" id="L63">        Map&lt;Long, Long&gt; result = new HashMap&lt;Long, Long&gt;();</span>
+<span class="nc bnc" id="L64" title="All 4 branches missed.">        if (ids == null || ids.isEmpty()) {</span>
+<span class="nc" id="L65">            return result;</span>
+        }
+<span class="nc" id="L67">        List&lt;String&gt; keys = new java.util.ArrayList&lt;String&gt;();</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">        for (Long id : ids) {</span>
+<span class="nc" id="L69">            keys.add(COUNT_PREFIX + type + &quot;:&quot; + id);</span>
+<span class="nc" id="L70">        }</span>
+<span class="nc" id="L71">        List&lt;String&gt; values = redisTemplate.opsForValue().multiGet(keys);</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">        for (int i = 0; i &lt; ids.size(); i++) {</span>
+<span class="nc" id="L73">            Long id = ids.get(i);</span>
+<span class="nc bnc" id="L74" title="All 4 branches missed.">            String val = values != null &amp;&amp; i &lt; values.size() ? values.get(i) : null;</span>
+<span class="nc bnc" id="L75" title="All 2 branches missed.">            if (val != null) {</span>
+<span class="nc" id="L76">                result.put(id, Long.parseLong(val));</span>
+            } else {
+<span class="nc bnc" id="L78" title="All 4 branches missed.">                long fallback = dbFallbacks != null &amp;&amp; dbFallbacks.containsKey(id) ? dbFallbacks.get(id) : 0L;</span>
+<span class="nc bnc" id="L79" title="All 2 branches missed.">                if (fallback &gt; 0) {</span>
+<span class="nc" id="L80">                    redisTemplate.opsForValue().set(COUNT_PREFIX + type + &quot;:&quot; + id, String.valueOf(fallback));</span>
+                }
+<span class="nc" id="L82">                result.put(id, fallback);</span>
+            }
+        }
+<span class="nc" id="L85">        return result;</span>
+    }
+
+    public Set&lt;String&gt; pollDirtyKeys() {
+<span class="nc" id="L89">        Set&lt;String&gt; members = redisTemplate.opsForSet().members(DIRTY_SET);</span>
+<span class="nc bnc" id="L90" title="All 4 branches missed.">        if (members == null || members.isEmpty()) {</span>
+<span class="nc" id="L91">            return java.util.Collections.emptySet();</span>
+        }
+<span class="nc" id="L93">        return members;</span>
+    }
+
+    public void clearDirtyKey(String member) {
+<span class="nc" id="L97">        redisTemplate.opsForSet().remove(DIRTY_SET, member);</span>
+<span class="nc" id="L98">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

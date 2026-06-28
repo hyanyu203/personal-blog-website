@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SnippetService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.snippet.service</a> &gt; <span class="el_source">SnippetService.java</span></div><h1>SnippetService.java</h1><pre class="source lang-java linenums">package com.jiangou.snippet.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jiangou.common.exception.NotFoundException;
+import com.jiangou.common.exception.ValidationException;
+import com.jiangou.common.result.PageResult;
+import com.jiangou.common.util.MarkdownUtils;
+import com.jiangou.snippet.dto.SnippetDTO;
+import com.jiangou.snippet.entity.SnippetEntity;
+import com.jiangou.snippet.mapper.SnippetMapper;
+import com.jiangou.snippet.vo.SnippetVO;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class SnippetService {
+
+    private final SnippetMapper snippetMapper;
+    private final SnippetLikeService snippetLikeService;
+
+<span class="nc" id="L28">    public SnippetService(SnippetMapper snippetMapper, SnippetLikeService snippetLikeService) {</span>
+<span class="nc" id="L29">        this.snippetMapper = snippetMapper;</span>
+<span class="nc" id="L30">        this.snippetLikeService = snippetLikeService;</span>
+<span class="nc" id="L31">    }</span>
+
+    public PageResult&lt;SnippetVO&gt; listPublic(long page, long pageSize, String language) {
+<span class="nc" id="L34">        LambdaQueryWrapper&lt;SnippetEntity&gt; wrapper = publicWrapper();</span>
+<span class="nc bnc" id="L35" title="All 2 branches missed.">        if (StringUtils.hasText(language)) {</span>
+<span class="nc" id="L36">            wrapper.eq(SnippetEntity::getLanguage, language);</span>
+        }
+<span class="nc" id="L38">        wrapper.orderByDesc(SnippetEntity::getCreatedAt);</span>
+<span class="nc" id="L39">        Page&lt;SnippetEntity&gt; result = snippetMapper.selectPage(new Page&lt;&gt;(page, pageSize), wrapper);</span>
+<span class="nc" id="L40">        return PageResult.of(result.getRecords().stream().map(this::toVo).collect(Collectors.toList()),</span>
+<span class="nc" id="L41">                result.getTotal(), page, pageSize);</span>
+    }
+
+    public PageResult&lt;SnippetVO&gt; listAdmin(long page, long pageSize) {
+<span class="nc" id="L45">        Page&lt;SnippetEntity&gt; result = snippetMapper.selectPage(new Page&lt;&gt;(page, pageSize),</span>
+<span class="nc" id="L46">                new LambdaQueryWrapper&lt;SnippetEntity&gt;().isNull(SnippetEntity::getDeletedAt)</span>
+<span class="nc" id="L47">                        .orderByDesc(SnippetEntity::getUpdatedAt));</span>
+<span class="nc" id="L48">        return PageResult.of(result.getRecords().stream().map(this::toVo).collect(Collectors.toList()),</span>
+<span class="nc" id="L49">                result.getTotal(), page, pageSize);</span>
+    }
+
+    public SnippetVO getBySlug(String slug) {
+<span class="nc" id="L53">        SnippetEntity entity = snippetMapper.selectOne(publicWrapper().eq(SnippetEntity::getSlug, slug));</span>
+<span class="nc bnc" id="L54" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L55">            throw new NotFoundException(&quot;代码片段不存在&quot;);</span>
+        }
+<span class="nc" id="L57">        snippetMapper.update(null, new LambdaUpdateWrapper&lt;SnippetEntity&gt;()</span>
+<span class="nc" id="L58">                .eq(SnippetEntity::getId, entity.getId())</span>
+<span class="nc" id="L59">                .isNull(SnippetEntity::getDeletedAt)</span>
+<span class="nc" id="L60">                .setSql(&quot;view_count = COALESCE(view_count, 0) + 1&quot;));</span>
+<span class="nc bnc" id="L61" title="All 2 branches missed.">        long current = entity.getViewCount() == null ? 0L : entity.getViewCount();</span>
+<span class="nc" id="L62">        entity.setViewCount(current + 1);</span>
+<span class="nc" id="L63">        return toVo(entity);</span>
+    }
+
+    public String getRawCode(String slug) {
+<span class="nc" id="L67">        SnippetEntity entity = snippetMapper.selectOne(publicWrapper().eq(SnippetEntity::getSlug, slug));</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L69">            throw new NotFoundException(&quot;代码片段不存在&quot;);</span>
+        }
+<span class="nc" id="L71">        return entity.getCode();</span>
+    }
+
+    @Transactional
+    public SnippetVO create(SnippetDTO dto, Long authorId) {
+<span class="nc" id="L76">        ensureSlugUnique(dto.getSlug(), null);</span>
+<span class="nc" id="L77">        SnippetEntity entity = fromDto(dto, authorId);</span>
+<span class="nc" id="L78">        entity.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L79">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L80">        snippetMapper.insert(entity);</span>
+<span class="nc" id="L81">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public SnippetVO update(Long id, SnippetDTO dto) {
+<span class="nc" id="L86">        SnippetEntity entity = findActive(id);</span>
+<span class="nc bnc" id="L87" title="All 2 branches missed.">        if (StringUtils.hasText(dto.getSlug())) {</span>
+<span class="nc" id="L88">            ensureSlugUnique(dto.getSlug(), id);</span>
+<span class="nc" id="L89">            entity.setSlug(dto.getSlug());</span>
+        }
+<span class="nc bnc" id="L91" title="All 2 branches missed.">        if (StringUtils.hasText(dto.getTitle())) {</span>
+<span class="nc" id="L92">            entity.setTitle(dto.getTitle());</span>
+        }
+<span class="nc bnc" id="L94" title="All 2 branches missed.">        if (StringUtils.hasText(dto.getLanguage())) {</span>
+<span class="nc" id="L95">            entity.setLanguage(dto.getLanguage());</span>
+        }
+<span class="nc bnc" id="L97" title="All 2 branches missed.">        if (dto.getCode() != null) {</span>
+<span class="nc" id="L98">            entity.setCode(dto.getCode());</span>
+        }
+<span class="nc bnc" id="L100" title="All 2 branches missed.">        if (dto.getDescriptionMd() != null) {</span>
+<span class="nc" id="L101">            entity.setDescriptionMd(dto.getDescriptionMd());</span>
+<span class="nc" id="L102">            entity.setDescriptionHtml(MarkdownUtils.toHtml(dto.getDescriptionMd()));</span>
+        }
+<span class="nc bnc" id="L104" title="All 2 branches missed.">        if (dto.getVisibility() != null) {</span>
+<span class="nc" id="L105">            entity.setVisibility(dto.getVisibility());</span>
+        }
+<span class="nc" id="L107">        entity.setHighlightedHtml(wrapCode(entity.getCode(), entity.getLanguage()));</span>
+<span class="nc" id="L108">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L109">        snippetMapper.updateById(entity);</span>
+<span class="nc" id="L110">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public void delete(Long id) {
+<span class="nc" id="L115">        SnippetEntity entity = findActive(id);</span>
+<span class="nc" id="L116">        entity.setDeletedAt(LocalDateTime.now());</span>
+<span class="nc" id="L117">        snippetMapper.updateById(entity);</span>
+<span class="nc" id="L118">    }</span>
+
+    @Transactional
+    public void recordCopy(Long id) {
+<span class="nc" id="L122">        SnippetEntity entity = snippetMapper.selectOne(publicWrapper().eq(SnippetEntity::getId, id));</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L124">            throw new NotFoundException(&quot;代码片段不存在&quot;);</span>
+        }
+<span class="nc" id="L126">        entity.setCopyCount(entity.getCopyCount() + 1);</span>
+<span class="nc" id="L127">        snippetMapper.updateById(entity);</span>
+<span class="nc" id="L128">    }</span>
+
+    private LambdaQueryWrapper&lt;SnippetEntity&gt; publicWrapper() {
+<span class="nc" id="L131">        return new LambdaQueryWrapper&lt;SnippetEntity&gt;()</span>
+<span class="nc" id="L132">                .eq(SnippetEntity::getVisibility, &quot;public&quot;)</span>
+<span class="nc" id="L133">                .isNull(SnippetEntity::getDeletedAt);</span>
+    }
+
+    private SnippetEntity fromDto(SnippetDTO dto, Long authorId) {
+<span class="nc" id="L137">        SnippetEntity entity = new SnippetEntity();</span>
+<span class="nc" id="L138">        entity.setAuthorId(authorId);</span>
+<span class="nc" id="L139">        entity.setTitle(dto.getTitle());</span>
+<span class="nc" id="L140">        entity.setSlug(dto.getSlug());</span>
+<span class="nc" id="L141">        entity.setLanguage(dto.getLanguage());</span>
+<span class="nc" id="L142">        entity.setCode(dto.getCode());</span>
+<span class="nc" id="L143">        entity.setHighlightedHtml(wrapCode(dto.getCode(), dto.getLanguage()));</span>
+<span class="nc" id="L144">        entity.setDescriptionMd(dto.getDescriptionMd());</span>
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        entity.setDescriptionHtml(MarkdownUtils.toHtml(dto.getDescriptionMd() == null ? &quot;&quot; : dto.getDescriptionMd()));</span>
+<span class="nc bnc" id="L146" title="All 2 branches missed.">        entity.setVisibility(dto.getVisibility() == null ? &quot;public&quot; : dto.getVisibility());</span>
+<span class="nc" id="L147">        entity.setViewCount(0L);</span>
+<span class="nc" id="L148">        entity.setCopyCount(0L);</span>
+<span class="nc" id="L149">        entity.setLikeCount(0L);</span>
+<span class="nc" id="L150">        entity.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L151">        return entity;</span>
+    }
+
+    private String wrapCode(String code, String language) {
+<span class="nc" id="L155">        String lang = sanitizeLanguage(language);</span>
+<span class="nc" id="L156">        return &quot;&lt;pre&gt;&lt;code class=\&quot;language-&quot; + lang + &quot;\&quot;&gt;&quot; + escapeHtml(code) + &quot;&lt;/code&gt;&lt;/pre&gt;&quot;;</span>
+    }
+
+    private String sanitizeLanguage(String language) {
+<span class="nc bnc" id="L160" title="All 2 branches missed.">        if (!StringUtils.hasText(language)) {</span>
+<span class="nc" id="L161">            return &quot;text&quot;;</span>
+        }
+<span class="nc" id="L163">        String sanitized = language.replaceAll(&quot;[^a-zA-Z0-9+#.-]&quot;, &quot;&quot;);</span>
+<span class="nc bnc" id="L164" title="All 2 branches missed.">        return sanitized.isEmpty() ? &quot;text&quot; : sanitized;</span>
+    }
+
+    private String escapeHtml(String text) {
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        if (text == null) {</span>
+<span class="nc" id="L169">            return &quot;&quot;;</span>
+        }
+<span class="nc" id="L171">        return text.replace(&quot;&amp;&quot;, &quot;&amp;amp;&quot;)</span>
+<span class="nc" id="L172">                .replace(&quot;&lt;&quot;, &quot;&amp;lt;&quot;)</span>
+<span class="nc" id="L173">                .replace(&quot;&gt;&quot;, &quot;&amp;gt;&quot;)</span>
+<span class="nc" id="L174">                .replace(&quot;\&quot;&quot;, &quot;&amp;quot;&quot;)</span>
+<span class="nc" id="L175">                .replace(&quot;'&quot;, &quot;&amp;#39;&quot;);</span>
+    }
+
+    private void ensureSlugUnique(String slug, Long excludeId) {
+<span class="nc" id="L179">        LambdaQueryWrapper&lt;SnippetEntity&gt; w = new LambdaQueryWrapper&lt;SnippetEntity&gt;()</span>
+<span class="nc" id="L180">                .eq(SnippetEntity::getSlug, slug).isNull(SnippetEntity::getDeletedAt);</span>
+<span class="nc bnc" id="L181" title="All 2 branches missed.">        if (excludeId != null) {</span>
+<span class="nc" id="L182">            w.ne(SnippetEntity::getId, excludeId);</span>
+        }
+<span class="nc bnc" id="L184" title="All 2 branches missed.">        if (snippetMapper.selectCount(w) &gt; 0) {</span>
+<span class="nc" id="L185">            throw new ValidationException(&quot;slug 已存在&quot;);</span>
+        }
+<span class="nc" id="L187">    }</span>
+
+    private SnippetEntity findActive(Long id) {
+<span class="nc" id="L190">        SnippetEntity entity = snippetMapper.selectOne(new LambdaQueryWrapper&lt;SnippetEntity&gt;()</span>
+<span class="nc" id="L191">                .eq(SnippetEntity::getId, id).isNull(SnippetEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L192" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L193">            throw new NotFoundException(&quot;代码片段不存在&quot;);</span>
+        }
+<span class="nc" id="L195">        return entity;</span>
+    }
+
+    private SnippetVO toVo(SnippetEntity e) {
+<span class="nc" id="L199">        return SnippetVO.builder()</span>
+<span class="nc" id="L200">                .id(e.getId()).title(e.getTitle()).slug(e.getSlug())</span>
+<span class="nc" id="L201">                .language(e.getLanguage()).code(e.getCode())</span>
+<span class="nc" id="L202">                .highlightedHtml(e.getHighlightedHtml())</span>
+<span class="nc" id="L203">                .descriptionHtml(e.getDescriptionHtml())</span>
+<span class="nc" id="L204">                .viewCount(e.getViewCount()).copyCount(e.getCopyCount())</span>
+<span class="nc" id="L205">                .likeCount(snippetLikeService.getLikeCount(e))</span>
+<span class="nc" id="L206">                .createdAt(e.getCreatedAt()).build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

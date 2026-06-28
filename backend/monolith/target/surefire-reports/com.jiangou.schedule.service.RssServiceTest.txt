@@ -1,0 +1,8 @@
+-------------------------------------------------------------------------------
+Test set: com.jiangou.schedule.service.RssServiceTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.794 s <<< FAILURE! - in com.jiangou.schedule.service.RssServiceTest
+buildFeed_queriesOnlyPublicPublishedArticles  Time elapsed: 0.788 s  <<< ERROR!
+com.baomidou.mybatisplus.core.exceptions.MybatisPlusException: can not find lambda cache for this entity [com.jiangou.article.entity.ArticleEntity]
+	at com.jiangou.schedule.service.RssServiceTest.buildFeed_queriesOnlyPublicPublishedArticles(RssServiceTest.java:43)
+

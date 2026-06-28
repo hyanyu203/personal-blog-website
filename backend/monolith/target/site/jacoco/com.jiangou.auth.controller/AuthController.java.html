@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.auth.controller</a> &gt; <span class="el_source">AuthController.java</span></div><h1>AuthController.java</h1><pre class="source lang-java linenums">package com.jiangou.auth.controller;
+
+import com.jiangou.auth.dto.LoginDTO;
+import com.jiangou.auth.dto.LogoutDTO;
+import com.jiangou.auth.dto.OAuthExchangeDTO;
+import com.jiangou.auth.dto.RefreshDTO;
+import com.jiangou.auth.dto.RegisterDTO;
+import com.jiangou.auth.dto.ResetPasswordDTO;
+import com.jiangou.auth.dto.SendRegisterCodeDTO;
+import com.jiangou.auth.dto.SendResetCodeDTO;
+import com.jiangou.auth.service.AuthService;
+import com.jiangou.auth.service.CaptchaService;
+import com.jiangou.auth.service.GitHubOAuthService;
+import com.jiangou.auth.service.UserAuthService;
+import com.jiangou.auth.vo.AuthVO;
+import com.jiangou.auth.vo.CaptchaVO;
+import com.jiangou.common.exception.UnauthorizedException;
+import com.jiangou.common.result.ApiResult;
+import com.jiangou.security.AuthCookieService;
+import com.jiangou.security.ClientIpResolver;
+import com.jiangou.security.CsrfCookieService;
+import com.jiangou.security.AuthTokenResolver;
+import com.jiangou.security.JwtTokenBlacklistService;
+import com.jiangou.security.JwtTokenProvider;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.validation.Valid;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+@Tag(name = &quot;Auth&quot;)
+@RestController
+@RequestMapping(&quot;/api/v1/auth&quot;)
+public class AuthController {
+
+    private final AuthService authService;
+    private final UserAuthService userAuthService;
+    private final CaptchaService captchaService;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final GitHubOAuthService gitHubOAuthService;
+    private final JwtTokenBlacklistService tokenBlacklistService;
+    private final AuthCookieService authCookieService;
+    private final CsrfCookieService csrfCookieService;
+    private final AuthTokenResolver authTokenResolver;
+    private final ClientIpResolver clientIpResolver;
+
+    public AuthController(AuthService authService, UserAuthService userAuthService,
+                          CaptchaService captchaService, JwtTokenProvider jwtTokenProvider,
+                          GitHubOAuthService gitHubOAuthService,
+                          JwtTokenBlacklistService tokenBlacklistService,
+                          AuthCookieService authCookieService,
+                          CsrfCookieService csrfCookieService,
+                          AuthTokenResolver authTokenResolver,
+<span class="nc" id="L66">                          ClientIpResolver clientIpResolver) {</span>
+<span class="nc" id="L67">        this.authService = authService;</span>
+<span class="nc" id="L68">        this.userAuthService = userAuthService;</span>
+<span class="nc" id="L69">        this.captchaService = captchaService;</span>
+<span class="nc" id="L70">        this.jwtTokenProvider = jwtTokenProvider;</span>
+<span class="nc" id="L71">        this.gitHubOAuthService = gitHubOAuthService;</span>
+<span class="nc" id="L72">        this.tokenBlacklistService = tokenBlacklistService;</span>
+<span class="nc" id="L73">        this.authCookieService = authCookieService;</span>
+<span class="nc" id="L74">        this.csrfCookieService = csrfCookieService;</span>
+<span class="nc" id="L75">        this.authTokenResolver = authTokenResolver;</span>
+<span class="nc" id="L76">        this.clientIpResolver = clientIpResolver;</span>
+<span class="nc" id="L77">    }</span>
+
+    private void writeSessionCookies(HttpServletResponse response, AuthVO auth) {
+<span class="nc" id="L80">        authCookieService.writeTokens(response, auth.getAccessToken(), auth.getRefreshToken(), auth.getExpiresIn());</span>
+<span class="nc" id="L81">        csrfCookieService.issueFreshToken(response);</span>
+<span class="nc" id="L82">    }</span>
+
+    @Operation(summary = &quot;登录&quot;)
+    @PostMapping(&quot;/login&quot;)
+    public ApiResult&lt;AuthVO&gt; login(@Valid @RequestBody LoginDTO dto, HttpServletResponse response) {
+<span class="nc" id="L87">        captchaService.verifyAndConsume(dto.getCaptchaId(), dto.getCaptchaCode());</span>
+<span class="nc" id="L88">        AuthVO auth = authService.login(dto);</span>
+<span class="nc" id="L89">        writeSessionCookies(response, auth);</span>
+<span class="nc" id="L90">        return ApiResult.ok(auth.withoutTokens());</span>
+    }
+
+    @Operation(summary = &quot;图形验证码&quot;)
+    @GetMapping(&quot;/captcha&quot;)
+    public ApiResult&lt;CaptchaVO&gt; captcha() {
+<span class="nc" id="L96">        return ApiResult.ok(captchaService.generate());</span>
+    }
+
+    @Operation(summary = &quot;发送注册邮箱验证码&quot;)
+    @PostMapping(&quot;/register/send-code&quot;)
+    public ApiResult&lt;Void&gt; sendRegisterCode(@Valid @RequestBody SendRegisterCodeDTO dto,
+                                            HttpServletRequest request) {
+<span class="nc" id="L103">        userAuthService.sendRegisterCode(dto, clientIp(request));</span>
+<span class="nc" id="L104">        return ApiResult.ok();</span>
+    }
+
+    @Operation(summary = &quot;用户注册&quot;)
+    @PostMapping(&quot;/register&quot;)
+    public ApiResult&lt;AuthVO&gt; register(@Valid @RequestBody RegisterDTO dto, HttpServletResponse response) {
+<span class="nc" id="L110">        AuthVO auth = userAuthService.register(dto);</span>
+<span class="nc" id="L111">        writeSessionCookies(response, auth);</span>
+<span class="nc" id="L112">        return ApiResult.ok(auth.withoutTokens());</span>
+    }
+
+    @Operation(summary = &quot;发送重置密码邮箱验证码&quot;)
+    @PostMapping(&quot;/forgot-password/send-code&quot;)
+    public ApiResult&lt;Void&gt; sendResetCode(@Valid @RequestBody SendResetCodeDTO dto,
+                                         HttpServletRequest request) {
+<span class="nc" id="L119">        userAuthService.sendResetCode(dto, clientIp(request));</span>
+<span class="nc" id="L120">        return ApiResult.ok();</span>
+    }
+
+    @Operation(summary = &quot;重置密码&quot;)
+    @PostMapping(&quot;/reset-password&quot;)
+    public ApiResult&lt;Void&gt; resetPassword(@Valid @RequestBody ResetPasswordDTO dto) {
+<span class="nc" id="L126">        userAuthService.resetPassword(dto);</span>
+<span class="nc" id="L127">        return ApiResult.ok();</span>
+    }
+
+    @Operation(summary = &quot;刷新 access token&quot;)
+    @PostMapping(&quot;/refresh&quot;)
+    public ApiResult&lt;AuthVO&gt; refresh(@RequestBody(required = false) RefreshDTO dto,
+                                     HttpServletRequest request,
+                                     HttpServletResponse response) {
+<span class="nc bnc" id="L135" title="All 2 branches missed.">        String refreshToken = dto != null ? dto.getRefreshToken() : null;</span>
+<span class="nc bnc" id="L136" title="All 2 branches missed.">        if (!StringUtils.hasText(refreshToken)) {</span>
+<span class="nc" id="L137">            refreshToken = authCookieService.readRefreshToken(request);</span>
+        }
+<span class="nc bnc" id="L139" title="All 2 branches missed.">        if (!StringUtils.hasText(refreshToken)) {</span>
+<span class="nc" id="L140">            throw new UnauthorizedException(&quot;缺少 refresh token&quot;);</span>
+        }
+<span class="nc" id="L142">        RefreshDTO refreshDTO = new RefreshDTO();</span>
+<span class="nc" id="L143">        refreshDTO.setRefreshToken(refreshToken);</span>
+<span class="nc" id="L144">        AuthVO auth = authService.refresh(refreshDTO);</span>
+<span class="nc" id="L145">        writeSessionCookies(response, auth);</span>
+<span class="nc" id="L146">        return ApiResult.ok(auth.withoutTokens());</span>
+    }
+
+    @Operation(summary = &quot;登出&quot;)
+    @PostMapping(&quot;/logout&quot;)
+    public ApiResult&lt;Void&gt; logout(@RequestHeader(value = &quot;Authorization&quot;, required = false) String authorization,
+                                  @RequestBody(required = false) LogoutDTO dto,
+                                  HttpServletRequest request,
+                                  HttpServletResponse response) {
+<span class="nc" id="L155">        blacklistIfPresent(authTokenResolver.resolveAccessToken(request, authorization), true);</span>
+<span class="nc bnc" id="L156" title="All 2 branches missed.">        String refreshToken = dto != null ? dto.getRefreshToken() : null;</span>
+<span class="nc bnc" id="L157" title="All 2 branches missed.">        if (!StringUtils.hasText(refreshToken)) {</span>
+<span class="nc" id="L158">            refreshToken = authCookieService.readRefreshToken(request);</span>
+        }
+<span class="nc" id="L160">        blacklistIfPresent(refreshToken, false);</span>
+<span class="nc" id="L161">        authCookieService.clearTokens(response);</span>
+<span class="nc" id="L162">        return ApiResult.ok();</span>
+    }
+
+    @Operation(summary = &quot;GitHub OAuth 一次性 code 换取 token&quot;)
+    @PostMapping(&quot;/oauth/exchange&quot;)
+    public ApiResult&lt;AuthVO&gt; oauthExchange(@Valid @RequestBody OAuthExchangeDTO dto,
+                                           HttpServletResponse response) {
+<span class="nc" id="L169">        AuthVO auth = gitHubOAuthService.exchangeCode(dto.getCode());</span>
+<span class="nc" id="L170">        writeSessionCookies(response, auth);</span>
+<span class="nc" id="L171">        return ApiResult.ok(auth.withoutTokens());</span>
+    }
+
+    @Operation(summary = &quot;GitHub OAuth 跳转&quot;)
+    @GetMapping(&quot;/github&quot;)
+    public void githubRedirect(HttpServletResponse response) throws IOException {
+<span class="nc" id="L177">        response.sendRedirect(gitHubOAuthService.buildAuthorizeUrl());</span>
+<span class="nc" id="L178">    }</span>
+
+    @Operation(summary = &quot;GitHub OAuth 回调&quot;)
+    @GetMapping(&quot;/github/callback&quot;)
+    public void githubCallback(@RequestParam String code, @RequestParam String state,
+                               HttpServletResponse response) throws IOException {
+<span class="nc" id="L184">        response.sendRedirect(gitHubOAuthService.buildCallbackRedirect(code, state));</span>
+<span class="nc" id="L185">    }</span>
+
+    @Operation(summary = &quot;OAuth 配置状态&quot;)
+    @GetMapping(&quot;/github/enabled&quot;)
+    public ApiResult&lt;Map&lt;String, Boolean&gt;&gt; githubEnabled() {
+<span class="nc" id="L190">        Map&lt;String, Boolean&gt; result = new HashMap&lt;String, Boolean&gt;();</span>
+<span class="nc" id="L191">        result.put(&quot;enabled&quot;, gitHubOAuthService.isEnabled());</span>
+<span class="nc" id="L192">        return ApiResult.ok(result);</span>
+    }
+
+    @Operation(summary = &quot;当前用户&quot;)
+    @GetMapping(&quot;/me&quot;)
+    public ApiResult&lt;AuthVO.UserBriefVO&gt; me(HttpServletRequest request,
+                                            @RequestHeader(value = &quot;Authorization&quot;, required = false) String authorization) {
+<span class="nc" id="L199">        String accessToken = authTokenResolver.resolveAccessToken(request, authorization);</span>
+<span class="nc bnc" id="L200" title="All 2 branches missed.">        if (!StringUtils.hasText(accessToken)) {</span>
+<span class="nc" id="L201">            return ApiResult.fail(40101, &quot;未登录&quot;);</span>
+        }
+<span class="nc" id="L203">        Long userId = Long.valueOf(jwtTokenProvider.validateAccessToken(accessToken).getSubject());</span>
+<span class="nc" id="L204">        return ApiResult.ok(authService.me(userId));</span>
+    }
+
+    private void blacklistIfPresent(String token, boolean accessType) {
+<span class="nc bnc" id="L208" title="All 2 branches missed.">        if (!StringUtils.hasText(token)) {</span>
+<span class="nc" id="L209">            return;</span>
+        }
+        try {
+<span class="nc bnc" id="L212" title="All 2 branches missed.">            if (accessType) {</span>
+<span class="nc" id="L213">                tokenBlacklistService.blacklist(token,</span>
+<span class="nc" id="L214">                        jwtTokenProvider.validateAccessToken(token).getExpiration());</span>
+            } else {
+<span class="nc" id="L216">                tokenBlacklistService.blacklist(token,</span>
+<span class="nc" id="L217">                        jwtTokenProvider.validateRefreshToken(token).getExpiration());</span>
+            }
+<span class="nc" id="L219">        } catch (Exception ignored) {</span>
+            // ignore invalid token on logout
+<span class="nc" id="L221">        }</span>
+<span class="nc" id="L222">    }</span>
+
+    private String clientIp(HttpServletRequest request) {
+<span class="nc" id="L225">        return clientIpResolver.resolve(request);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

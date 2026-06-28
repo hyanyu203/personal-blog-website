@@ -1,0 +1,80 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:jiangou}?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=${MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL:false}&useSSL=${MYSQL_USE_SSL:true}
+    username: ${MYSQL_USER:jiangou}
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USER:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          ssl:
+            enable: ${MAIL_SMTP_SSL:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
+
+logging:
+  level:
+    root: WARN
+    com.jiangou: INFO
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+jiangou:
+  rate-limit:
+    trust-proxy-headers: ${RATE_LIMIT_TRUST_PROXY:true}
+  jwt:
+    secret: ${JWT_SECRET}
+    cookie-secure: ${JWT_COOKIE_SECURE:true}
+  auth:
+    registration-enabled: ${REGISTRATION_ENABLED:false}
+  prometheus:
+    scrape-token: ${PROMETHEUS_SCRAPE_TOKEN:}
+  site-url: ${NUXT_PUBLIC_SITE_URL:http://localhost}
+  admin-url: ${ADMIN_URL:http://localhost/admin}
+  search:
+    engine: ${SEARCH_ENGINE:mysql}
+    meilisearch:
+      host: ${MEILISEARCH_HOST:http://meilisearch:7700}
+      api-key: ${MEILISEARCH_API_KEY:}
+      index: jiangou
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://minio:9000}
+    public-endpoint: ${MINIO_PUBLIC_ENDPOINT:${MINIO_ENDPOINT:http://minio:9000}}
+    access-key: ${MINIO_ACCESS_KEY:}
+    secret-key: ${MINIO_SECRET_KEY:}
+    bucket: ${MINIO_BUCKET:jiangou}
+  github:
+    token: ${GITHUB_TOKEN:}
+    oauth:
+      client-id: ${GITHUB_OAUTH_CLIENT_ID:}
+      client-secret: ${GITHUB_OAUTH_CLIENT_SECRET:}
+      redirect-uri: ${GITHUB_OAUTH_REDIRECT_URI:}
+      allowed-usernames: ${GITHUB_OAUTH_ALLOWED_USERNAMES:}
+  cors:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:http://localhost}

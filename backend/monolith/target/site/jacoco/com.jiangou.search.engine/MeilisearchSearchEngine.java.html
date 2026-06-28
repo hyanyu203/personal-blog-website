@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MeilisearchSearchEngine.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.search.engine</a> &gt; <span class="el_source">MeilisearchSearchEngine.java</span></div><h1>MeilisearchSearchEngine.java</h1><pre class="source lang-java linenums">package com.jiangou.search.engine;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.jiangou.common.result.PageResult;
+import com.jiangou.config.SearchProperties;
+import com.jiangou.search.entity.SearchDocumentEntity;
+import com.jiangou.search.service.MeilisearchIndexRetryService;
+import com.jiangou.search.util.SearchMetadataUtils;
+import com.jiangou.search.util.SearchQueryUtils;
+import com.jiangou.search.vo.SearchItemVO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Component
+@ConditionalOnProperty(name = &quot;jiangou.search.engine&quot;, havingValue = &quot;meilisearch&quot;)
+public class MeilisearchSearchEngine implements SearchEngine {
+
+<span class="nc" id="L34">    private static final Logger log = LoggerFactory.getLogger(MeilisearchSearchEngine.class);</span>
+
+    private final SearchProperties searchProperties;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+    private final MeilisearchIndexRetryService retryService;
+
+    public MeilisearchSearchEngine(SearchProperties searchProperties, RestTemplate restTemplate,
+<span class="nc" id="L42">                                   ObjectMapper objectMapper, MeilisearchIndexRetryService retryService) {</span>
+<span class="nc" id="L43">        this.searchProperties = searchProperties;</span>
+<span class="nc" id="L44">        this.restTemplate = restTemplate;</span>
+<span class="nc" id="L45">        this.objectMapper = objectMapper;</span>
+<span class="nc" id="L46">        this.retryService = retryService;</span>
+<span class="nc" id="L47">    }</span>
+
+    @Override
+    public PageResult&lt;SearchItemVO&gt; search(String q, String type, long page, long pageSize) {
+<span class="nc bnc" id="L51" title="All 4 branches missed.">        if (q == null || q.trim().isEmpty()) {</span>
+<span class="nc" id="L52">            return PageResult.of(new ArrayList&lt;SearchItemVO&gt;(), 0, page, pageSize);</span>
+        }
+        try {
+<span class="nc" id="L55">            String index = searchProperties.getMeilisearch().getIndex();</span>
+<span class="nc" id="L56">            String url = searchProperties.getMeilisearch().getHost() + &quot;/indexes/&quot; + index + &quot;/search&quot;;</span>
+<span class="nc" id="L57">            ObjectNode body = objectMapper.createObjectNode();</span>
+<span class="nc" id="L58">            body.put(&quot;q&quot;, q);</span>
+<span class="nc" id="L59">            body.put(&quot;limit&quot;, pageSize);</span>
+<span class="nc" id="L60">            body.put(&quot;offset&quot;, (page - 1) * pageSize);</span>
+<span class="nc bnc" id="L61" title="All 4 branches missed.">            if (type != null &amp;&amp; !&quot;all&quot;.equals(type)) {</span>
+<span class="nc" id="L62">                String safeType = SearchQueryUtils.normalizeType(type);</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">                if (!&quot;all&quot;.equals(safeType)) {</span>
+<span class="nc" id="L64">                    body.put(&quot;filter&quot;, &quot;targetType = \&quot;&quot; + safeType + &quot;\&quot;&quot;);</span>
+                }
+            }
+<span class="nc" id="L67">            ResponseEntity&lt;String&gt; response = restTemplate.exchange(url, HttpMethod.POST,</span>
+<span class="nc" id="L68">                    new HttpEntity&lt;String&gt;(body.toString(), jsonHeaders()), String.class);</span>
+<span class="nc" id="L69">            JsonNode root = objectMapper.readTree(response.getBody());</span>
+<span class="nc" id="L70">            JsonNode hits = root.path(&quot;hits&quot;);</span>
+<span class="nc" id="L71">            List&lt;SearchItemVO&gt; items = new ArrayList&lt;SearchItemVO&gt;();</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">            if (hits.isArray()) {</span>
+<span class="nc bnc" id="L73" title="All 2 branches missed.">                for (JsonNode hit : hits) {</span>
+<span class="nc" id="L74">                    items.add(toItem(hit));</span>
+<span class="nc" id="L75">                }</span>
+            }
+<span class="nc" id="L77">            long total = root.path(&quot;estimatedTotalHits&quot;).asLong(items.size());</span>
+<span class="nc" id="L78">            return PageResult.of(items, total, page, pageSize);</span>
+<span class="nc" id="L79">        } catch (Exception e) {</span>
+<span class="nc" id="L80">            log.warn(&quot;Meilisearch search failed, returning empty result: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L81">            return PageResult.of(new ArrayList&lt;SearchItemVO&gt;(), 0, page, pageSize);</span>
+        }
+    }
+
+    @Override
+    public List&lt;String&gt; suggest(String q, int limit) {
+<span class="nc" id="L87">        PageResult&lt;SearchItemVO&gt; result = search(q, &quot;all&quot;, 1, limit);</span>
+<span class="nc" id="L88">        return result.getItems().stream().map(SearchItemVO::getTitle).collect(Collectors.toList());</span>
+    }
+
+    public void ensureIndex() {
+        try {
+<span class="nc" id="L93">            String host = searchProperties.getMeilisearch().getHost();</span>
+<span class="nc" id="L94">            String index = searchProperties.getMeilisearch().getIndex();</span>
+<span class="nc" id="L95">            restTemplate.exchange(host + &quot;/indexes&quot;, HttpMethod.POST,</span>
+<span class="nc" id="L96">                    new HttpEntity&lt;String&gt;(&quot;{\&quot;uid\&quot;:\&quot;&quot; + index + &quot;\&quot;,\&quot;primaryKey\&quot;:\&quot;id\&quot;}&quot;, jsonHeaders()),</span>
+                    String.class);
+<span class="nc" id="L98">            ObjectNode settings = objectMapper.createObjectNode();</span>
+<span class="nc" id="L99">            ArrayNode searchable = objectMapper.createArrayNode();</span>
+<span class="nc" id="L100">            searchable.add(&quot;title&quot;);</span>
+<span class="nc" id="L101">            searchable.add(&quot;content&quot;);</span>
+<span class="nc" id="L102">            settings.set(&quot;searchableAttributes&quot;, searchable);</span>
+<span class="nc" id="L103">            ArrayNode filterable = objectMapper.createArrayNode();</span>
+<span class="nc" id="L104">            filterable.add(&quot;targetType&quot;);</span>
+<span class="nc" id="L105">            settings.set(&quot;filterableAttributes&quot;, filterable);</span>
+<span class="nc" id="L106">            restTemplate.exchange(host + &quot;/indexes/&quot; + index + &quot;/settings&quot;, HttpMethod.PATCH,</span>
+<span class="nc" id="L107">                    new HttpEntity&lt;String&gt;(settings.toString(), jsonHeaders()), String.class);</span>
+<span class="nc" id="L108">        } catch (Exception e) {</span>
+<span class="nc" id="L109">            log.debug(&quot;Meilisearch index init: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L110">        }</span>
+<span class="nc" id="L111">    }</span>
+
+    public void replaceAll(List&lt;SearchDocumentEntity&gt; docs) {
+<span class="nc" id="L114">        ensureIndex();</span>
+<span class="nc" id="L115">        String index = searchProperties.getMeilisearch().getIndex();</span>
+<span class="nc" id="L116">        String host = searchProperties.getMeilisearch().getHost();</span>
+<span class="nc" id="L117">        boolean ok = runWithRetry(&quot;replaceAll&quot;, () -&gt; {</span>
+<span class="nc" id="L118">            restTemplate.exchange(host + &quot;/indexes/&quot; + index + &quot;/documents&quot;, HttpMethod.DELETE,</span>
+<span class="nc" id="L119">                    new HttpEntity&lt;String&gt;(jsonHeaders()), String.class);</span>
+<span class="nc bnc" id="L120" title="All 2 branches missed.">            if (!docs.isEmpty()) {</span>
+<span class="nc" id="L121">                restTemplate.exchange(host + &quot;/indexes/&quot; + index + &quot;/documents&quot;, HttpMethod.POST,</span>
+<span class="nc" id="L122">                        new HttpEntity&lt;String&gt;(toDocumentBatch(docs).toString(), jsonHeaders()), String.class);</span>
+            }
+<span class="nc" id="L124">        });</span>
+<span class="nc bnc" id="L125" title="All 2 branches missed.">        if (ok) {</span>
+<span class="nc" id="L126">            retryService.clearFullRebuildFailed();</span>
+        } else {
+<span class="nc" id="L128">            retryService.markFullRebuildFailed();</span>
+        }
+<span class="nc" id="L130">    }</span>
+
+    public void upsertDocument(SearchDocumentEntity doc) {
+<span class="nc" id="L133">        ensureIndex();</span>
+<span class="nc" id="L134">        String index = searchProperties.getMeilisearch().getIndex();</span>
+<span class="nc" id="L135">        String host = searchProperties.getMeilisearch().getHost();</span>
+<span class="nc" id="L136">        ArrayNode batch = objectMapper.createArrayNode();</span>
+<span class="nc" id="L137">        batch.add(toDocumentNode(doc));</span>
+<span class="nc" id="L138">        boolean ok = runWithRetry(&quot;upsert &quot; + doc.getTargetType() + &quot;:&quot; + doc.getTargetId(), () -&gt;</span>
+<span class="nc" id="L139">                restTemplate.exchange(host + &quot;/indexes/&quot; + index + &quot;/documents&quot;, HttpMethod.POST,</span>
+<span class="nc" id="L140">                        new HttpEntity&lt;String&gt;(batch.toString(), jsonHeaders()), String.class));</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">        if (ok) {</span>
+<span class="nc" id="L142">            retryService.clearFailed(doc.getTargetType(), doc.getTargetId());</span>
+        } else {
+<span class="nc" id="L144">            retryService.markFailed(doc.getTargetType(), doc.getTargetId());</span>
+        }
+<span class="nc" id="L146">    }</span>
+
+    public void deleteDocument(String targetType, Long targetId) {
+<span class="nc" id="L149">        ensureIndex();</span>
+<span class="nc" id="L150">        String index = searchProperties.getMeilisearch().getIndex();</span>
+<span class="nc" id="L151">        String host = searchProperties.getMeilisearch().getHost();</span>
+<span class="nc" id="L152">        String documentId = targetType + &quot;-&quot; + targetId;</span>
+<span class="nc" id="L153">        boolean ok = runWithRetry(&quot;delete &quot; + targetType + &quot;:&quot; + targetId, () -&gt;</span>
+<span class="nc" id="L154">                restTemplate.exchange(host + &quot;/indexes/&quot; + index + &quot;/documents/&quot; + documentId, HttpMethod.DELETE,</span>
+<span class="nc" id="L155">                        new HttpEntity&lt;String&gt;(jsonHeaders()), String.class));</span>
+<span class="nc bnc" id="L156" title="All 2 branches missed.">        if (ok) {</span>
+<span class="nc" id="L157">            retryService.clearFailed(targetType, targetId);</span>
+        } else {
+<span class="nc" id="L159">            retryService.markFailed(targetType, targetId);</span>
+        }
+<span class="nc" id="L161">    }</span>
+
+    private boolean runWithRetry(String operation, Runnable action) {
+<span class="nc" id="L164">        int maxAttempts = Math.max(1, searchProperties.getMeilisearch().getRetryMaxAttempts());</span>
+<span class="nc" id="L165">        long delayMs = Math.max(0L, searchProperties.getMeilisearch().getRetryDelayMs());</span>
+<span class="nc" id="L166">        Exception last = null;</span>
+<span class="nc bnc" id="L167" title="All 2 branches missed.">        for (int attempt = 1; attempt &lt;= maxAttempts; attempt++) {</span>
+            try {
+<span class="nc" id="L169">                action.run();</span>
+<span class="nc" id="L170">                return true;</span>
+<span class="nc" id="L171">            } catch (Exception e) {</span>
+<span class="nc" id="L172">                last = e;</span>
+<span class="nc bnc" id="L173" title="All 4 branches missed.">                if (attempt &lt; maxAttempts &amp;&amp; delayMs &gt; 0) {</span>
+                    try {
+<span class="nc" id="L175">                        Thread.sleep(delayMs * attempt);</span>
+<span class="nc" id="L176">                    } catch (InterruptedException ie) {</span>
+<span class="nc" id="L177">                        Thread.currentThread().interrupt();</span>
+<span class="nc" id="L178">                        break;</span>
+<span class="nc" id="L179">                    }</span>
+                }
+            }
+        }
+<span class="nc bnc" id="L183" title="All 2 branches missed.">        log.error(&quot;Meilisearch {} failed after {} attempts: {}&quot;, operation, maxAttempts,</span>
+<span class="nc" id="L184">                last == null ? &quot;unknown&quot; : last.getMessage());</span>
+<span class="nc" id="L185">        return false;</span>
+    }
+
+    private ArrayNode toDocumentBatch(List&lt;SearchDocumentEntity&gt; docs) {
+<span class="nc" id="L189">        ArrayNode batch = objectMapper.createArrayNode();</span>
+<span class="nc bnc" id="L190" title="All 2 branches missed.">        for (SearchDocumentEntity doc : docs) {</span>
+<span class="nc" id="L191">            batch.add(toDocumentNode(doc));</span>
+<span class="nc" id="L192">        }</span>
+<span class="nc" id="L193">        return batch;</span>
+    }
+
+    private ObjectNode toDocumentNode(SearchDocumentEntity doc) {
+<span class="nc" id="L197">        ObjectNode item = objectMapper.createObjectNode();</span>
+<span class="nc" id="L198">        item.put(&quot;id&quot;, doc.getTargetType() + &quot;-&quot; + doc.getTargetId());</span>
+<span class="nc" id="L199">        item.put(&quot;targetType&quot;, doc.getTargetType());</span>
+<span class="nc" id="L200">        item.put(&quot;targetId&quot;, doc.getTargetId());</span>
+<span class="nc" id="L201">        item.put(&quot;title&quot;, doc.getTitle());</span>
+<span class="nc bnc" id="L202" title="All 2 branches missed.">        item.put(&quot;content&quot;, doc.getContent() == null ? &quot;&quot; : doc.getContent());</span>
+<span class="nc" id="L203">        item.put(&quot;url&quot;, SearchMetadataUtils.readUrl(doc.getMetadata()));</span>
+<span class="nc" id="L204">        return item;</span>
+    }
+
+    private SearchItemVO toItem(JsonNode hit) {
+<span class="nc" id="L208">        String content = hit.path(&quot;content&quot;).asText(&quot;&quot;);</span>
+<span class="nc bnc" id="L209" title="All 2 branches missed.">        String snippet = content.length() &gt; 120 ? content.substring(0, 120) + &quot;...&quot; : content;</span>
+<span class="nc" id="L210">        return SearchItemVO.builder()</span>
+<span class="nc" id="L211">                .type(hit.path(&quot;targetType&quot;).asText(&quot;&quot;))</span>
+<span class="nc" id="L212">                .title(hit.path(&quot;title&quot;).asText(&quot;&quot;))</span>
+<span class="nc" id="L213">                .url(hit.path(&quot;url&quot;).asText(&quot;/&quot;))</span>
+<span class="nc" id="L214">                .snippet(snippet)</span>
+<span class="nc" id="L215">                .score(1.0)</span>
+<span class="nc" id="L216">                .build();</span>
+    }
+
+    private HttpHeaders jsonHeaders() {
+<span class="nc" id="L220">        HttpHeaders headers = new HttpHeaders();</span>
+<span class="nc" id="L221">        headers.setContentType(MediaType.APPLICATION_JSON);</span>
+<span class="nc" id="L222">        headers.set(&quot;Authorization&quot;, &quot;Bearer &quot; + searchProperties.getMeilisearch().getApiKey());</span>
+<span class="nc" id="L223">        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));</span>
+<span class="nc" id="L224">        return headers;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

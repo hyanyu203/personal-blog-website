@@ -1,0 +1,7 @@
+jiangou:
+  auth:
+    registration-enabled: true
+
+logging:
+  level:
+    com.jiangou: INFO

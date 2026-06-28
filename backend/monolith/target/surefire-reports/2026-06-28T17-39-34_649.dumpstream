@@ -1,0 +1,96 @@
+# Created at 2026-06-28T17:39:35.258
+java.io.FileNotFoundException: C:\Users\Lenovo\Documents\?????????\backend\monolith\jacoco.e (拒绝访问。)
+
+# Created at 2026-06-28T17:39:35.261
+	at java.io.FileOutputStream.open0(Native Method)
+
+# Created at 2026-06-28T17:39:35.261
+	at java.io.FileOutputStream.open(FileOutputStream.java:270)
+
+# Created at 2026-06-28T17:39:35.261
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:213)
+
+# Created at 2026-06-28T17:39:35.262
+	at org.jacoco.agent.rt.internal_aeaf9ab.output.FileOutput.openFile(FileOutput.java:75)
+
+# Created at 2026-06-28T17:39:35.266
+	at org.jacoco.agent.rt.internal_aeaf9ab.output.FileOutput.startup(FileOutput.java:57)
+
+# Created at 2026-06-28T17:39:35.267
+	at org.jacoco.agent.rt.internal_aeaf9ab.Agent.startup(Agent.java:129)
+
+# Created at 2026-06-28T17:39:35.267
+	at org.jacoco.agent.rt.internal_aeaf9ab.Agent.getInstance(Agent.java:54)
+
+# Created at 2026-06-28T17:39:35.268
+	at org.jacoco.agent.rt.internal_aeaf9ab.PreMain.premain(PreMain.java:47)
+
+# Created at 2026-06-28T17:39:35.268
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+
+# Created at 2026-06-28T17:39:35.269
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+
+# Created at 2026-06-28T17:39:35.269
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+
+# Created at 2026-06-28T17:39:35.270
+	at java.lang.reflect.Method.invoke(Method.java:498)
+
+# Created at 2026-06-28T17:39:35.270
+	at sun.instrument.InstrumentationImpl.loadClassAndStartAgent(InstrumentationImpl.java:386)
+
+# Created at 2026-06-28T17:39:35.272
+	at sun.instrument.InstrumentationImpl.loadClassAndCallPremain(InstrumentationImpl.java:401)
+
+# Created at 2026-06-28T17:39:35.272
+Exception in thread "main" java.lang.reflect.InvocationTargetException
+
+# Created at 2026-06-28T17:39:35.273
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+
+# Created at 2026-06-28T17:39:35.274
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+
+# Created at 2026-06-28T17:39:35.274
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+
+# Created at 2026-06-28T17:39:35.275
+	at java.lang.reflect.Method.invoke(Method.java:498)
+
+# Created at 2026-06-28T17:39:35.275
+	at sun.instrument.InstrumentationImpl.loadClassAndStartAgent(InstrumentationImpl.java:386)
+
+# Created at 2026-06-28T17:39:35.276
+	at sun.instrument.InstrumentationImpl.loadClassAndCallPremain(InstrumentationImpl.java:401)
+
+# Created at 2026-06-28T17:39:35.276
+Caused by: java.io.FileNotFoundException: C:\Users\Lenovo\Documents\?????????\backend\monolith\jacoco.e (拒绝访问。)
+
+# Created at 2026-06-28T17:39:35.278
+	at java.io.FileOutputStream.open0(Native Method)
+
+# Created at 2026-06-28T17:39:35.278
+	at java.io.FileOutputStream.open(FileOutputStream.java:270)
+
+# Created at 2026-06-28T17:39:35.278
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:213)
+
+# Created at 2026-06-28T17:39:35.279
+	at org.jacoco.agent.rt.internal_aeaf9ab.output.FileOutput.openFile(FileOutput.java:75)
+
+# Created at 2026-06-28T17:39:35.279
+	at org.jacoco.agent.rt.internal_aeaf9ab.output.FileOutput.startup(FileOutput.java:57)
+
+# Created at 2026-06-28T17:39:35.280
+	at org.jacoco.agent.rt.internal_aeaf9ab.Agent.startup(Agent.java:129)
+
+# Created at 2026-06-28T17:39:35.280
+	at org.jacoco.agent.rt.internal_aeaf9ab.Agent.getInstance(Agent.java:54)
+
+# Created at 2026-06-28T17:39:35.281
+	at org.jacoco.agent.rt.internal_aeaf9ab.PreMain.premain(PreMain.java:47)
+
+# Created at 2026-06-28T17:39:35.281
+	... 6 more
+

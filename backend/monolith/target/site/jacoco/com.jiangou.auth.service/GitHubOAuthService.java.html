@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GitHubOAuthService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.auth.service</a> &gt; <span class="el_source">GitHubOAuthService.java</span></div><h1>GitHubOAuthService.java</h1><pre class="source lang-java linenums">package com.jiangou.auth.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jiangou.auth.vo.AuthVO;
+import com.jiangou.common.exception.ConflictException;
+import com.jiangou.common.exception.UnauthorizedException;
+import com.jiangou.common.exception.ValidationException;
+import com.jiangou.config.GitHubOAuthProperties;
+import com.jiangou.security.JwtTokenProvider;
+import com.jiangou.user.entity.UserEntity;
+import com.jiangou.user.mapper.UserMapper;
+import com.jiangou.user.service.RoleService;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestTemplate;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+@Service
+public class GitHubOAuthService {
+
+    private static final String STATE_PREFIX = &quot;oauth:github:state:&quot;;
+    private static final String CODE_PREFIX = &quot;oauth:github:code:&quot;;
+
+    private final GitHubOAuthProperties oauthProperties;
+    private final UserMapper userMapper;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final StringRedisTemplate redisTemplate;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+    private final RoleService roleService;
+
+    @Value(&quot;${jiangou.admin-url:http://localhost:5173/admin}&quot;)
+    private String adminUrl;
+
+    public GitHubOAuthService(GitHubOAuthProperties oauthProperties, UserMapper userMapper,
+                              JwtTokenProvider jwtTokenProvider, StringRedisTemplate redisTemplate,
+                              RestTemplate restTemplate, ObjectMapper objectMapper,
+<span class="nc" id="L54">                              RoleService roleService) {</span>
+<span class="nc" id="L55">        this.oauthProperties = oauthProperties;</span>
+<span class="nc" id="L56">        this.userMapper = userMapper;</span>
+<span class="nc" id="L57">        this.jwtTokenProvider = jwtTokenProvider;</span>
+<span class="nc" id="L58">        this.redisTemplate = redisTemplate;</span>
+<span class="nc" id="L59">        this.restTemplate = restTemplate;</span>
+<span class="nc" id="L60">        this.objectMapper = objectMapper;</span>
+<span class="nc" id="L61">        this.roleService = roleService;</span>
+<span class="nc" id="L62">    }</span>
+
+    public boolean isEnabled() {
+<span class="nc" id="L65">        return oauthProperties.isEnabled();</span>
+    }
+
+    public String buildAuthorizeUrl() {
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (!isEnabled()) {</span>
+<span class="nc" id="L70">            throw new ValidationException(&quot;GitHub OAuth 未配置&quot;);</span>
+        }
+<span class="nc" id="L72">        String state = UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;);</span>
+<span class="nc" id="L73">        redisTemplate.opsForValue().set(STATE_PREFIX + state, &quot;1&quot;, 10, TimeUnit.MINUTES);</span>
+<span class="nc" id="L74">        String redirect = encode(oauthProperties.getRedirectUri());</span>
+<span class="nc" id="L75">        return &quot;https://github.com/login/oauth/authorize?client_id=&quot; + oauthProperties.getClientId()</span>
+                + &quot;&amp;redirect_uri=&quot; + redirect
+                + &quot;&amp;scope=read:user user:email&quot;
+                + &quot;&amp;state=&quot; + state;
+    }
+
+    public String buildCallbackRedirect(String code, String state) {
+<span class="nc" id="L82">        AuthVO auth = handleCallback(code, state);</span>
+<span class="nc" id="L83">        String exchangeCode = UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;);</span>
+<span class="nc" id="L84">        redisTemplate.opsForValue().set(CODE_PREFIX + exchangeCode, String.valueOf(auth.getUser().getId()),</span>
+                2, TimeUnit.MINUTES);
+<span class="nc" id="L86">        return adminUrl + &quot;/oauth/callback?code=&quot; + encode(exchangeCode);</span>
+    }
+
+    public AuthVO exchangeCode(String code) {
+<span class="nc bnc" id="L90" title="All 2 branches missed.">        if (!StringUtils.hasText(code)) {</span>
+<span class="nc" id="L91">            throw new ValidationException(&quot;缺少 OAuth code&quot;);</span>
+        }
+<span class="nc" id="L93">        String key = CODE_PREFIX + code;</span>
+<span class="nc" id="L94">        String payload = redisTemplate.opsForValue().get(key);</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">        if (!StringUtils.hasText(payload)) {</span>
+<span class="nc" id="L96">            throw new UnauthorizedException(&quot;OAuth code 无效或已过期&quot;);</span>
+        }
+<span class="nc" id="L98">        redisTemplate.delete(key);</span>
+        Long userId;
+        try {
+<span class="nc" id="L101">            userId = Long.valueOf(payload.trim());</span>
+<span class="nc" id="L102">        } catch (NumberFormatException e) {</span>
+<span class="nc" id="L103">            throw new UnauthorizedException(&quot;OAuth code 无效&quot;);</span>
+<span class="nc" id="L104">        }</span>
+<span class="nc" id="L105">        UserEntity user = userMapper.selectById(userId);</span>
+<span class="nc bnc" id="L106" title="All 4 branches missed.">        if (user == null || user.getDeletedAt() != null) {</span>
+<span class="nc" id="L107">            throw new UnauthorizedException(&quot;用户不存在&quot;);</span>
+        }
+<span class="nc bnc" id="L109" title="All 2 branches missed.">        if (!roleService.hasRole(user.getId(), &quot;ADMIN&quot;)) {</span>
+<span class="nc" id="L110">            throw new UnauthorizedException(&quot;该账号无后台访问权限&quot;);</span>
+        }
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        if (!&quot;active&quot;.equals(user.getStatus())) {</span>
+<span class="nc" id="L113">            throw new UnauthorizedException(&quot;账号已禁用&quot;);</span>
+        }
+<span class="nc" id="L115">        return toAuthVO(user);</span>
+    }
+
+    public AuthVO handleCallback(String code, String state) {
+<span class="nc bnc" id="L119" title="All 2 branches missed.">        if (!isEnabled()) {</span>
+<span class="nc" id="L120">            throw new ValidationException(&quot;GitHub OAuth 未配置&quot;);</span>
+        }
+<span class="nc bnc" id="L122" title="All 4 branches missed.">        if (!StringUtils.hasText(code) || !StringUtils.hasText(state)) {</span>
+<span class="nc" id="L123">            throw new ValidationException(&quot;缺少 OAuth 参数&quot;);</span>
+        }
+<span class="nc" id="L125">        String stateKey = STATE_PREFIX + state;</span>
+<span class="nc bnc" id="L126" title="All 2 branches missed.">        if (!Boolean.TRUE.equals(redisTemplate.hasKey(stateKey))) {</span>
+<span class="nc" id="L127">            throw new UnauthorizedException(&quot;无效的 OAuth state&quot;);</span>
+        }
+<span class="nc" id="L129">        redisTemplate.delete(stateKey);</span>
+
+<span class="nc" id="L131">        JsonNode tokenJson = exchangeToken(code);</span>
+<span class="nc" id="L132">        String accessToken = textOrNull(tokenJson, &quot;access_token&quot;);</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">        if (!StringUtils.hasText(accessToken)) {</span>
+<span class="nc" id="L134">            throw new UnauthorizedException(&quot;GitHub 授权失败&quot;);</span>
+        }
+
+<span class="nc" id="L137">        JsonNode profile = fetchProfile(accessToken);</span>
+<span class="nc" id="L138">        String githubId = profile.path(&quot;id&quot;).asText();</span>
+<span class="nc" id="L139">        String login = profile.path(&quot;login&quot;).asText();</span>
+<span class="nc" id="L140">        String name = profile.path(&quot;name&quot;).asText(login);</span>
+<span class="nc" id="L141">        String avatar = textOrNull(profile, &quot;avatar_url&quot;);</span>
+<span class="nc" id="L142">        String email = textOrNull(profile, &quot;email&quot;);</span>
+<span class="nc bnc" id="L143" title="All 2 branches missed.">        if (!StringUtils.hasText(email)) {</span>
+<span class="nc" id="L144">            email = fetchPrimaryEmail(accessToken);</span>
+        }
+
+<span class="nc" id="L147">        UserEntity user = userMapper.selectOne(new LambdaQueryWrapper&lt;UserEntity&gt;()</span>
+<span class="nc" id="L148">                .eq(UserEntity::getProvider, &quot;github&quot;)</span>
+<span class="nc" id="L149">                .eq(UserEntity::getProviderId, githubId)</span>
+<span class="nc" id="L150">                .isNull(UserEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L151" title="All 2 branches missed.">        if (user == null) {</span>
+<span class="nc bnc" id="L152" title="All 2 branches missed.">            if (!oauthProperties.isUsernameAllowed(login)) {</span>
+<span class="nc" id="L153">                throw new UnauthorizedException(&quot;该 GitHub 账号未授权登录&quot;);</span>
+            }
+<span class="nc" id="L155">            UserEntity usernameTaken = userMapper.selectOne(new LambdaQueryWrapper&lt;UserEntity&gt;()</span>
+<span class="nc" id="L156">                    .eq(UserEntity::getUsername, login)</span>
+<span class="nc" id="L157">                    .isNull(UserEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L158" title="All 2 branches missed.">            if (usernameTaken != null) {</span>
+<span class="nc" id="L159">                throw new ConflictException(&quot;GitHub 用户名与已有本地账号冲突&quot;);</span>
+            }
+<span class="nc" id="L161">            user = new UserEntity();</span>
+<span class="nc" id="L162">            user.setUsername(login);</span>
+<span class="nc" id="L163">            user.setDisplayName(name);</span>
+<span class="nc" id="L164">            user.setEmail(email);</span>
+<span class="nc" id="L165">            user.setAvatarUrl(avatar);</span>
+<span class="nc" id="L166">            user.setProvider(&quot;github&quot;);</span>
+<span class="nc" id="L167">            user.setProviderId(githubId);</span>
+<span class="nc" id="L168">            user.setStatus(&quot;active&quot;);</span>
+<span class="nc" id="L169">            user.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L170">            user.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L171">            user.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L172">            userMapper.insert(user);</span>
+<span class="nc" id="L173">            roleService.assignRole(user.getId(), &quot;ADMIN&quot;);</span>
+<span class="nc" id="L174">        } else {</span>
+<span class="nc" id="L175">            user.setDisplayName(name);</span>
+<span class="nc" id="L176">            user.setEmail(email);</span>
+<span class="nc" id="L177">            user.setAvatarUrl(avatar);</span>
+<span class="nc" id="L178">            user.setProvider(&quot;github&quot;);</span>
+<span class="nc" id="L179">            user.setProviderId(githubId);</span>
+<span class="nc" id="L180">            user.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L181">            userMapper.updateById(user);</span>
+        }
+<span class="nc bnc" id="L183" title="All 2 branches missed.">        if (!roleService.hasRole(user.getId(), &quot;ADMIN&quot;)) {</span>
+<span class="nc" id="L184">            throw new UnauthorizedException(&quot;该账号无后台访问权限&quot;);</span>
+        }
+<span class="nc bnc" id="L186" title="All 2 branches missed.">        if (!&quot;active&quot;.equals(user.getStatus())) {</span>
+<span class="nc" id="L187">            throw new UnauthorizedException(&quot;账号已禁用&quot;);</span>
+        }
+<span class="nc" id="L189">        user.setLastLoginAt(LocalDateTime.now());</span>
+<span class="nc" id="L190">        userMapper.updateById(user);</span>
+<span class="nc" id="L191">        return toAuthVO(user);</span>
+    }
+
+    private JsonNode exchangeToken(String code) {
+        try {
+<span class="nc" id="L196">            HttpHeaders headers = new HttpHeaders();</span>
+<span class="nc" id="L197">            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);</span>
+<span class="nc" id="L198">            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));</span>
+<span class="nc" id="L199">            MultiValueMap&lt;String, String&gt; body = new LinkedMultiValueMap&lt;String, String&gt;();</span>
+<span class="nc" id="L200">            body.add(&quot;client_id&quot;, oauthProperties.getClientId());</span>
+<span class="nc" id="L201">            body.add(&quot;client_secret&quot;, oauthProperties.getClientSecret());</span>
+<span class="nc" id="L202">            body.add(&quot;code&quot;, code);</span>
+<span class="nc" id="L203">            body.add(&quot;redirect_uri&quot;, oauthProperties.getRedirectUri());</span>
+<span class="nc" id="L204">            ResponseEntity&lt;String&gt; response = restTemplate.postForEntity(</span>
+                    &quot;https://github.com/login/oauth/access_token&quot;,
+                    new HttpEntity&lt;MultiValueMap&lt;String, String&gt;&gt;(body, headers), String.class);
+<span class="nc" id="L207">            return objectMapper.readTree(response.getBody());</span>
+<span class="nc" id="L208">        } catch (Exception e) {</span>
+<span class="nc" id="L209">            throw new UnauthorizedException(&quot;GitHub token 交换失败&quot;);</span>
+        }
+    }
+
+    private JsonNode fetchProfile(String accessToken) {
+        try {
+<span class="nc" id="L215">            HttpHeaders headers = new HttpHeaders();</span>
+<span class="nc" id="L216">            headers.set(&quot;Authorization&quot;, &quot;Bearer &quot; + accessToken);</span>
+<span class="nc" id="L217">            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));</span>
+<span class="nc" id="L218">            ResponseEntity&lt;String&gt; response = restTemplate.exchange(</span>
+                    &quot;https://api.github.com/user&quot;, org.springframework.http.HttpMethod.GET,
+                    new HttpEntity&lt;Void&gt;(headers), String.class);
+<span class="nc" id="L221">            return objectMapper.readTree(response.getBody());</span>
+<span class="nc" id="L222">        } catch (Exception e) {</span>
+<span class="nc" id="L223">            throw new UnauthorizedException(&quot;获取 GitHub 用户信息失败&quot;);</span>
+        }
+    }
+
+    private String fetchPrimaryEmail(String accessToken) {
+        try {
+<span class="nc" id="L229">            HttpHeaders headers = new HttpHeaders();</span>
+<span class="nc" id="L230">            headers.set(&quot;Authorization&quot;, &quot;Bearer &quot; + accessToken);</span>
+<span class="nc" id="L231">            headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));</span>
+<span class="nc" id="L232">            ResponseEntity&lt;String&gt; response = restTemplate.exchange(</span>
+                    &quot;https://api.github.com/user/emails&quot;, org.springframework.http.HttpMethod.GET,
+                    new HttpEntity&lt;Void&gt;(headers), String.class);
+<span class="nc" id="L235">            JsonNode emails = objectMapper.readTree(response.getBody());</span>
+<span class="nc bnc" id="L236" title="All 2 branches missed.">            if (emails.isArray()) {</span>
+<span class="nc bnc" id="L237" title="All 2 branches missed.">                for (JsonNode email : emails) {</span>
+<span class="nc bnc" id="L238" title="All 2 branches missed.">                    if (email.path(&quot;primary&quot;).asBoolean(false)) {</span>
+<span class="nc" id="L239">                        return textOrNull(email, &quot;email&quot;);</span>
+                    }
+<span class="nc" id="L241">                }</span>
+            }
+<span class="nc" id="L243">        } catch (Exception ignored) {</span>
+            // optional
+<span class="nc" id="L245">        }</span>
+<span class="nc" id="L246">        return null;</span>
+    }
+
+    private AuthVO toAuthVO(UserEntity user) {
+<span class="nc bnc" id="L250" title="All 2 branches missed.">        int tokenVersion = user.getTokenVersion() == null ? 0 : user.getTokenVersion();</span>
+<span class="nc" id="L251">        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getUsername(), tokenVersion);</span>
+<span class="nc" id="L252">        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), user.getUsername(), tokenVersion);</span>
+<span class="nc" id="L253">        return AuthVO.builder()</span>
+<span class="nc" id="L254">                .accessToken(accessToken)</span>
+<span class="nc" id="L255">                .refreshToken(refreshToken)</span>
+<span class="nc" id="L256">                .expiresIn(3600L)</span>
+<span class="nc" id="L257">                .user(AuthVO.UserBriefVO.builder()</span>
+<span class="nc" id="L258">                        .id(user.getId())</span>
+<span class="nc" id="L259">                        .username(user.getUsername())</span>
+<span class="nc" id="L260">                        .displayName(user.getDisplayName())</span>
+<span class="nc" id="L261">                        .roles(roleService.getRoleCodes(user.getId()))</span>
+<span class="nc" id="L262">                        .build())</span>
+<span class="nc" id="L263">                .build();</span>
+    }
+
+    private String encode(String value) {
+        try {
+<span class="nc bnc" id="L268" title="All 2 branches missed.">            return URLEncoder.encode(value == null ? &quot;&quot; : value, &quot;UTF-8&quot;);</span>
+<span class="nc" id="L269">        } catch (UnsupportedEncodingException e) {</span>
+<span class="nc" id="L270">            return value;</span>
+        }
+    }
+
+    private String textOrNull(JsonNode node, String field) {
+<span class="nc" id="L275">        JsonNode child = node.get(field);</span>
+<span class="nc bnc" id="L276" title="All 4 branches missed.">        if (child == null || child.isNull()) {</span>
+<span class="nc" id="L277">            return null;</span>
+        }
+<span class="nc" id="L279">        String text = child.asText();</span>
+<span class="nc bnc" id="L280" title="All 2 branches missed.">        return text.isEmpty() ? null : text;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

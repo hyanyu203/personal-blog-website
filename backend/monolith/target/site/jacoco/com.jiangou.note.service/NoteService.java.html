@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>NoteService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.note.service</a> &gt; <span class="el_source">NoteService.java</span></div><h1>NoteService.java</h1><pre class="source lang-java linenums">package com.jiangou.note.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jiangou.common.exception.NotFoundException;
+import com.jiangou.common.result.PageResult;
+import com.jiangou.common.util.MarkdownUtils;
+import com.jiangou.note.dto.NoteDTO;
+import com.jiangou.note.entity.NoteEntity;
+import com.jiangou.note.mapper.NoteMapper;
+import com.jiangou.note.vo.NoteVO;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.stream.Collectors;
+
+@Service
+public class NoteService {
+
+    private final NoteMapper noteMapper;
+    private final NoteLikeService noteLikeService;
+
+<span class="nc" id="L24">    public NoteService(NoteMapper noteMapper, NoteLikeService noteLikeService) {</span>
+<span class="nc" id="L25">        this.noteMapper = noteMapper;</span>
+<span class="nc" id="L26">        this.noteLikeService = noteLikeService;</span>
+<span class="nc" id="L27">    }</span>
+
+    public PageResult&lt;NoteVO&gt; listPublic(long page, long pageSize) {
+<span class="nc" id="L30">        Page&lt;NoteEntity&gt; result = noteMapper.selectPage(new Page&lt;&gt;(page, pageSize), publishedWrapper());</span>
+<span class="nc" id="L31">        return PageResult.of(result.getRecords().stream().map(this::toVo).collect(Collectors.toList()),</span>
+<span class="nc" id="L32">                result.getTotal(), page, pageSize);</span>
+    }
+
+    public PageResult&lt;NoteVO&gt; listAdmin(long page, long pageSize) {
+<span class="nc" id="L36">        Page&lt;NoteEntity&gt; result = noteMapper.selectPage(new Page&lt;&gt;(page, pageSize),</span>
+<span class="nc" id="L37">                new LambdaQueryWrapper&lt;NoteEntity&gt;().isNull(NoteEntity::getDeletedAt)</span>
+<span class="nc" id="L38">                        .orderByDesc(NoteEntity::getCreatedAt));</span>
+<span class="nc" id="L39">        return PageResult.of(result.getRecords().stream().map(this::toVo).collect(Collectors.toList()),</span>
+<span class="nc" id="L40">                result.getTotal(), page, pageSize);</span>
+    }
+
+    public NoteVO getByIdPublic(Long id) {
+<span class="nc" id="L44">        NoteEntity entity = noteMapper.selectOne(publishedWrapper().eq(NoteEntity::getId, id));</span>
+<span class="nc bnc" id="L45" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L46">            throw new NotFoundException(&quot;动态不存在&quot;);</span>
+        }
+<span class="nc" id="L48">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public NoteVO create(NoteDTO dto, Long authorId) {
+<span class="nc" id="L53">        NoteEntity entity = new NoteEntity();</span>
+<span class="nc" id="L54">        entity.setAuthorId(authorId);</span>
+<span class="nc" id="L55">        applyContent(entity, dto.getContentMd());</span>
+<span class="nc" id="L56">        entity.setStatus(&quot;draft&quot;);</span>
+<span class="nc bnc" id="L57" title="All 2 branches missed.">        entity.setVisibility(dto.getVisibility() == null ? &quot;public&quot; : dto.getVisibility());</span>
+<span class="nc" id="L58">        entity.setLikeCount(0L);</span>
+<span class="nc" id="L59">        entity.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L60">        entity.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L61">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L62">        noteMapper.insert(entity);</span>
+<span class="nc" id="L63">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public NoteVO update(Long id, NoteDTO dto) {
+<span class="nc" id="L68">        NoteEntity entity = findActive(id);</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (dto.getContentMd() != null) {</span>
+<span class="nc" id="L70">            applyContent(entity, dto.getContentMd());</span>
+        }
+<span class="nc bnc" id="L72" title="All 2 branches missed.">        if (dto.getVisibility() != null) {</span>
+<span class="nc" id="L73">            entity.setVisibility(dto.getVisibility());</span>
+        }
+<span class="nc" id="L75">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L76">        noteMapper.updateById(entity);</span>
+<span class="nc" id="L77">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public NoteVO publish(Long id) {
+<span class="nc" id="L82">        NoteEntity entity = findActive(id);</span>
+<span class="nc" id="L83">        entity.setStatus(&quot;published&quot;);</span>
+<span class="nc" id="L84">        entity.setPublishedAt(LocalDateTime.now());</span>
+<span class="nc" id="L85">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L86">        noteMapper.updateById(entity);</span>
+<span class="nc" id="L87">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public void delete(Long id) {
+<span class="nc" id="L92">        NoteEntity entity = findActive(id);</span>
+<span class="nc" id="L93">        entity.setDeletedAt(LocalDateTime.now());</span>
+<span class="nc" id="L94">        noteMapper.updateById(entity);</span>
+<span class="nc" id="L95">    }</span>
+
+    private LambdaQueryWrapper&lt;NoteEntity&gt; publishedWrapper() {
+<span class="nc" id="L98">        return new LambdaQueryWrapper&lt;NoteEntity&gt;()</span>
+<span class="nc" id="L99">                .eq(NoteEntity::getStatus, &quot;published&quot;)</span>
+<span class="nc" id="L100">                .eq(NoteEntity::getVisibility, &quot;public&quot;)</span>
+<span class="nc" id="L101">                .isNull(NoteEntity::getDeletedAt)</span>
+<span class="nc" id="L102">                .orderByDesc(NoteEntity::getPublishedAt);</span>
+    }
+
+    private void applyContent(NoteEntity entity, String md) {
+<span class="nc" id="L106">        entity.setContentMd(md);</span>
+<span class="nc" id="L107">        entity.setContentHtml(MarkdownUtils.toHtml(md));</span>
+<span class="nc" id="L108">        entity.setContentText(MarkdownUtils.toPlainText(md));</span>
+<span class="nc" id="L109">    }</span>
+
+    private NoteEntity findActive(Long id) {
+<span class="nc" id="L112">        NoteEntity entity = noteMapper.selectOne(new LambdaQueryWrapper&lt;NoteEntity&gt;()</span>
+<span class="nc" id="L113">                .eq(NoteEntity::getId, id).isNull(NoteEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L114" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L115">            throw new NotFoundException(&quot;动态不存在&quot;);</span>
+        }
+<span class="nc" id="L117">        return entity;</span>
+    }
+
+    private NoteVO toVo(NoteEntity e) {
+<span class="nc" id="L121">        return NoteVO.builder()</span>
+<span class="nc" id="L122">                .id(e.getId()).contentHtml(e.getContentHtml()).contentMd(e.getContentMd())</span>
+<span class="nc" id="L123">                .status(e.getStatus()).likeCount(noteLikeService.getLikeCount(e))</span>
+<span class="nc" id="L124">                .publishedAt(e.getPublishedAt()).createdAt(e.getCreatedAt()).build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,1 @@
+import{W as u,K as d,X as n,Y as c}from"./entry.4d6996de.js";import{s as f}from"./safeRedirect.112849c5.js";const m=u(async e=>{let t,r;const{isAuthenticated:s,loaded:a,restoreSession:i}=d();if(a.value||([t,r]=n(()=>i()),await t,r()),s.value){const o=typeof e.query.redirect=="string"?e.query.redirect:void 0;return c(f(o))}});export{m as default};

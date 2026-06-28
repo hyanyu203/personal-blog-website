@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LikeCounterSyncScheduler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.schedule</a> &gt; <span class="el_source">LikeCounterSyncScheduler.java</span></div><h1>LikeCounterSyncScheduler.java</h1><pre class="source lang-java linenums">package com.jiangou.schedule;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.jiangou.article.entity.ArticleEntity;
+import com.jiangou.article.mapper.ArticleMapper;
+import com.jiangou.comment.entity.CommentEntity;
+import com.jiangou.comment.mapper.CommentMapper;
+import com.jiangou.common.service.LikeCounterService;
+import com.jiangou.note.entity.NoteEntity;
+import com.jiangou.note.mapper.NoteMapper;
+import com.jiangou.snippet.entity.SnippetEntity;
+import com.jiangou.snippet.mapper.SnippetMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.util.Set;
+
+@Component
+public class LikeCounterSyncScheduler {
+
+<span class="nc" id="L25">    private static final Logger log = LoggerFactory.getLogger(LikeCounterSyncScheduler.class);</span>
+
+    private final LikeCounterService likeCounterService;
+    private final StringRedisTemplate redisTemplate;
+    private final ArticleMapper articleMapper;
+    private final NoteMapper noteMapper;
+    private final CommentMapper commentMapper;
+    private final SnippetMapper snippetMapper;
+
+    public LikeCounterSyncScheduler(LikeCounterService likeCounterService,
+                                    StringRedisTemplate redisTemplate,
+                                    ArticleMapper articleMapper,
+                                    NoteMapper noteMapper,
+                                    CommentMapper commentMapper,
+<span class="nc" id="L39">                                    SnippetMapper snippetMapper) {</span>
+<span class="nc" id="L40">        this.likeCounterService = likeCounterService;</span>
+<span class="nc" id="L41">        this.redisTemplate = redisTemplate;</span>
+<span class="nc" id="L42">        this.articleMapper = articleMapper;</span>
+<span class="nc" id="L43">        this.noteMapper = noteMapper;</span>
+<span class="nc" id="L44">        this.commentMapper = commentMapper;</span>
+<span class="nc" id="L45">        this.snippetMapper = snippetMapper;</span>
+<span class="nc" id="L46">    }</span>
+
+    @Scheduled(fixedRate = 300000)
+    public void syncLikeCounts() {
+<span class="nc" id="L50">        Set&lt;String&gt; dirty = likeCounterService.pollDirtyKeys();</span>
+<span class="nc bnc" id="L51" title="All 2 branches missed.">        for (String item : dirty) {</span>
+<span class="nc" id="L52">            int sep = item.indexOf(':');</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">            if (sep &lt;= 0) {</span>
+<span class="nc" id="L54">                likeCounterService.clearDirtyKey(item);</span>
+<span class="nc" id="L55">                continue;</span>
+            }
+<span class="nc" id="L57">            String type = item.substring(0, sep);</span>
+            Long id;
+            try {
+<span class="nc" id="L60">                id = Long.valueOf(item.substring(sep + 1));</span>
+<span class="nc" id="L61">            } catch (NumberFormatException e) {</span>
+<span class="nc" id="L62">                likeCounterService.clearDirtyKey(item);</span>
+<span class="nc" id="L63">                continue;</span>
+<span class="nc" id="L64">            }</span>
+<span class="nc" id="L65">            String countKey = &quot;counter:&quot; + type + &quot;:&quot; + id;</span>
+<span class="nc" id="L66">            String val = redisTemplate.opsForValue().get(countKey);</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">            if (val == null) {</span>
+<span class="nc" id="L68">                likeCounterService.clearDirtyKey(item);</span>
+<span class="nc" id="L69">                continue;</span>
+            }
+            long count;
+            try {
+<span class="nc" id="L73">                count = Long.parseLong(val);</span>
+<span class="nc" id="L74">            } catch (NumberFormatException e) {</span>
+<span class="nc" id="L75">                log.warn(&quot;Invalid like counter value {}:{} - {}&quot;, type, id, val);</span>
+<span class="nc" id="L76">                likeCounterService.clearDirtyKey(item);</span>
+<span class="nc" id="L77">                continue;</span>
+<span class="nc" id="L78">            }</span>
+            try {
+<span class="nc" id="L80">                syncOne(type, id, count);</span>
+<span class="nc" id="L81">                likeCounterService.clearDirtyKey(item);</span>
+<span class="nc" id="L82">            } catch (Exception e) {</span>
+<span class="nc" id="L83">                log.warn(&quot;同步点赞计数失败 {}:{} - {}&quot;, type, id, e.getMessage());</span>
+<span class="nc" id="L84">            }</span>
+<span class="nc" id="L85">        }</span>
+<span class="nc bnc" id="L86" title="All 2 branches missed.">        if (!dirty.isEmpty()) {</span>
+<span class="nc" id="L87">            log.debug(&quot;已同步 {} 条点赞计数&quot;, dirty.size());</span>
+        }
+<span class="nc" id="L89">    }</span>
+
+    private void syncOne(String type, Long id, long count) {
+<span class="nc bnc" id="L92" title="All 2 branches missed.">        if (&quot;article&quot;.equals(type)) {</span>
+<span class="nc" id="L93">            articleMapper.update(null, new LambdaUpdateWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L94">                    .eq(ArticleEntity::getId, id)</span>
+<span class="nc" id="L95">                    .isNull(ArticleEntity::getDeletedAt)</span>
+<span class="nc" id="L96">                    .setSql(&quot;like_count = GREATEST(COALESCE(like_count, 0), &quot; + count + &quot;)&quot;));</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">        } else if (&quot;note&quot;.equals(type)) {</span>
+<span class="nc" id="L98">            noteMapper.update(null, new LambdaUpdateWrapper&lt;NoteEntity&gt;()</span>
+<span class="nc" id="L99">                    .eq(NoteEntity::getId, id)</span>
+<span class="nc" id="L100">                    .isNull(NoteEntity::getDeletedAt)</span>
+<span class="nc" id="L101">                    .setSql(&quot;like_count = GREATEST(COALESCE(like_count, 0), &quot; + count + &quot;)&quot;));</span>
+<span class="nc bnc" id="L102" title="All 2 branches missed.">        } else if (&quot;comment&quot;.equals(type)) {</span>
+<span class="nc" id="L103">            commentMapper.update(null, new LambdaUpdateWrapper&lt;CommentEntity&gt;()</span>
+<span class="nc" id="L104">                    .eq(CommentEntity::getId, id)</span>
+<span class="nc" id="L105">                    .isNull(CommentEntity::getDeletedAt)</span>
+<span class="nc" id="L106">                    .setSql(&quot;like_count = GREATEST(COALESCE(like_count, 0), &quot; + count + &quot;)&quot;));</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">        } else if (&quot;snippet&quot;.equals(type)) {</span>
+<span class="nc" id="L108">            snippetMapper.update(null, new LambdaUpdateWrapper&lt;SnippetEntity&gt;()</span>
+<span class="nc" id="L109">                    .eq(SnippetEntity::getId, id)</span>
+<span class="nc" id="L110">                    .isNull(SnippetEntity::getDeletedAt)</span>
+<span class="nc" id="L111">                    .setSql(&quot;like_count = GREATEST(COALESCE(like_count, 0), &quot; + count + &quot;)&quot;));</span>
+        }
+<span class="nc" id="L113">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

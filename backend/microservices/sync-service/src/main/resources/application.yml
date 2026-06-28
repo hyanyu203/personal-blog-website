@@ -1,0 +1,12 @@
+﻿server:
+  port: 8008
+
+spring:
+  application:
+    name: sync-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

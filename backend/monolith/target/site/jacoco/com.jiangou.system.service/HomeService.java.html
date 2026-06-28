@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HomeService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.system.service</a> &gt; <span class="el_source">HomeService.java</span></div><h1>HomeService.java</h1><pre class="source lang-java linenums">package com.jiangou.system.service;
+
+import com.jiangou.article.service.ArticleService;
+import com.jiangou.category.service.CategoryService;
+import com.jiangou.system.vo.HomeVO;
+import com.jiangou.tag.service.TagService;
+import org.springframework.stereotype.Service;
+
+@Service
+public class HomeService {
+
+    private final ArticleService articleService;
+    private final StatsService statsService;
+    private final SystemSettingService systemSettingService;
+    private final CategoryService categoryService;
+    private final TagService tagService;
+
+    public HomeService(ArticleService articleService, StatsService statsService,
+                       SystemSettingService systemSettingService,
+<span class="nc" id="L20">                       CategoryService categoryService, TagService tagService) {</span>
+<span class="nc" id="L21">        this.articleService = articleService;</span>
+<span class="nc" id="L22">        this.statsService = statsService;</span>
+<span class="nc" id="L23">        this.systemSettingService = systemSettingService;</span>
+<span class="nc" id="L24">        this.categoryService = categoryService;</span>
+<span class="nc" id="L25">        this.tagService = tagService;</span>
+<span class="nc" id="L26">    }</span>
+
+    public HomeVO loadHome() {
+<span class="nc" id="L29">        return HomeVO.builder()</span>
+<span class="nc" id="L30">                .articles(articleService.listPublic(1, 10, null, null, null))</span>
+<span class="nc" id="L31">                .stats(statsService.publicStats())</span>
+<span class="nc" id="L32">                .settings(systemSettingService.getPublicSettings())</span>
+<span class="nc" id="L33">                .categories(categoryService.listAll())</span>
+<span class="nc" id="L34">                .tags(tagService.listAll())</span>
+<span class="nc" id="L35">                .build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

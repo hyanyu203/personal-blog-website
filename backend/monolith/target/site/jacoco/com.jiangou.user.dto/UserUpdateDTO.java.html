@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserUpdateDTO.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.user.dto</a> &gt; <span class="el_source">UserUpdateDTO.java</span></div><h1>UserUpdateDTO.java</h1><pre class="source lang-java linenums">package com.jiangou.user.dto;
+
+import lombok.Data;
+
+import javax.validation.constraints.Email;
+import javax.validation.constraints.Pattern;
+import javax.validation.constraints.Size;
+import java.util.List;
+
+<span class="pc bnc" id="L10" title="All 38 branches missed.">@Data</span>
+public class UserUpdateDTO {
+
+    @Size(max = 64)
+<span class="fc" id="L14">    private String displayName;</span>
+
+    @Email
+    @Size(max = 255)
+<span class="fc" id="L18">    private String email;</span>
+
+    @Pattern(regexp = &quot;active|disabled&quot;, message = &quot;状态仅允许 active 或 disabled&quot;)
+<span class="fc" id="L21">    private String status;</span>
+
+<span class="fc" id="L23">    private List&lt;@Pattern(regexp = &quot;USER|ADMIN&quot;) String&gt; roles;</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

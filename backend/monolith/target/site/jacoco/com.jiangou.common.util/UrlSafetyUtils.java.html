@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UrlSafetyUtils.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.common.util</a> &gt; <span class="el_source">UrlSafetyUtils.java</span></div><h1>UrlSafetyUtils.java</h1><pre class="source lang-java linenums">package com.jiangou.common.util;
+
+import com.jiangou.common.exception.ValidationException;
+
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.URL;
+import java.net.UnknownHostException;
+
+public final class UrlSafetyUtils {
+
+    private UrlSafetyUtils() {
+    }
+
+    public static String normalizeOptionalHttpUrl(String url) {
+<span class="nc bnc" id="L18" title="All 4 branches missed.">        if (url == null || url.trim().isEmpty()) {</span>
+<span class="nc" id="L19">            return null;</span>
+        }
+<span class="nc" id="L21">        return parseHttpUrl(url.trim(), false);</span>
+    }
+
+    public static void validateExternalHttpUrl(String url) {
+<span class="nc bnc" id="L25" title="All 4 branches missed.">        if (url == null || url.trim().isEmpty()) {</span>
+<span class="nc" id="L26">            throw new ValidationException(&quot;URL 不能为空&quot;);</span>
+        }
+<span class="nc" id="L28">        resolveValidatedHost(url.trim());</span>
+<span class="nc" id="L29">    }</span>
+
+    public static void validateSameSiteTarget(String target, String siteUrl) {
+<span class="nc bnc" id="L32" title="All 8 branches missed.">        if (target == null || target.trim().isEmpty() || siteUrl == null || siteUrl.trim().isEmpty()) {</span>
+<span class="nc" id="L33">            throw new ValidationException(&quot;target 必须为本站 URL&quot;);</span>
+        }
+<span class="nc" id="L35">        URI targetUri = parseHttpUri(target.trim());</span>
+<span class="nc" id="L36">        URI siteUri = parseHttpUri(siteUrl.trim());</span>
+<span class="nc bnc" id="L37" title="All 6 branches missed.">        if (!schemeEquals(targetUri, siteUri) || !hostEquals(targetUri, siteUri) || !portEquals(targetUri, siteUri)) {</span>
+<span class="nc" id="L38">            throw new ValidationException(&quot;target 必须为本站 URL&quot;);</span>
+        }
+<span class="nc" id="L40">        String sitePath = normalizePath(siteUri.getPath());</span>
+<span class="nc" id="L41">        String targetPath = normalizePath(targetUri.getPath());</span>
+<span class="nc bnc" id="L42" title="All 2 branches missed.">        if (!&quot;/&quot;.equals(sitePath)</span>
+<span class="nc bnc" id="L43" title="All 2 branches missed.">                &amp;&amp; !targetPath.equals(sitePath)</span>
+<span class="nc bnc" id="L44" title="All 4 branches missed.">                &amp;&amp; !targetPath.startsWith(sitePath.endsWith(&quot;/&quot;) ? sitePath : sitePath + &quot;/&quot;)) {</span>
+<span class="nc" id="L45">            throw new ValidationException(&quot;target 必须为本站 URL&quot;);</span>
+        }
+<span class="nc" id="L47">    }</span>
+
+    public static HttpURLConnection openValidatedGetConnection(String urlString) throws IOException {
+<span class="nc" id="L50">        URI uri = URI.create(urlString.trim());</span>
+<span class="nc" id="L51">        String host = resolveValidatedHost(urlString.trim());</span>
+<span class="nc" id="L52">        InetAddress[] addresses = InetAddress.getAllByName(host);</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">        for (InetAddress address : addresses) {</span>
+<span class="nc bnc" id="L54" title="All 2 branches missed.">            if (isBlockedAddress(address)) {</span>
+<span class="nc" id="L55">                throw new ValidationException(&quot;不允许访问内网或保留地址&quot;);</span>
+            }
+        }
+<span class="nc bnc" id="L58" title="All 2 branches missed.">        int defaultPort = &quot;https&quot;.equalsIgnoreCase(uri.getScheme()) ? 443 : 80;</span>
+<span class="nc bnc" id="L59" title="All 2 branches missed.">        int port = uri.getPort() &gt; 0 ? uri.getPort() : defaultPort;</span>
+<span class="nc" id="L60">        String path = uri.getRawPath();</span>
+<span class="nc bnc" id="L61" title="All 4 branches missed.">        if (path == null || path.isEmpty()) {</span>
+<span class="nc" id="L62">            path = &quot;/&quot;;</span>
+        }
+<span class="nc bnc" id="L64" title="All 2 branches missed.">        if (uri.getRawQuery() != null) {</span>
+<span class="nc" id="L65">            path = path + &quot;?&quot; + uri.getRawQuery();</span>
+        }
+<span class="nc" id="L67">        HttpURLConnection conn = (HttpURLConnection) new URL(</span>
+<span class="nc" id="L68">                uri.getScheme(), addresses[0].getHostAddress(), port, path).openConnection();</span>
+<span class="nc" id="L69">        conn.setRequestProperty(&quot;Host&quot;, host);</span>
+<span class="nc" id="L70">        conn.setInstanceFollowRedirects(false);</span>
+<span class="nc" id="L71">        return conn;</span>
+    }
+
+    private static String resolveValidatedHost(String trimmed) {
+<span class="nc" id="L75">        String host = parseHttpUrl(trimmed, true);</span>
+<span class="nc bnc" id="L76" title="All 4 branches missed.">        if (&quot;localhost&quot;.equalsIgnoreCase(host) || host.endsWith(&quot;.local&quot;)) {</span>
+<span class="nc" id="L77">            throw new ValidationException(&quot;不允许访问本地地址&quot;);</span>
+        }
+        try {
+<span class="nc" id="L80">            InetAddress[] addresses = InetAddress.getAllByName(host);</span>
+<span class="nc bnc" id="L81" title="All 2 branches missed.">            for (InetAddress address : addresses) {</span>
+<span class="nc bnc" id="L82" title="All 2 branches missed.">                if (isBlockedAddress(address)) {</span>
+<span class="nc" id="L83">                    throw new ValidationException(&quot;不允许访问内网或保留地址&quot;);</span>
+                }
+            }
+<span class="nc" id="L86">        } catch (UnknownHostException e) {</span>
+<span class="nc" id="L87">            throw new ValidationException(&quot;无法解析 URL 主机名&quot;);</span>
+<span class="nc" id="L88">        }</span>
+<span class="nc" id="L89">        return host;</span>
+    }
+
+    private static String parseHttpUrl(String trimmed, boolean returnHost) {
+<span class="nc" id="L93">        URI uri = parseHttpUri(trimmed);</span>
+<span class="nc bnc" id="L94" title="All 2 branches missed.">        return returnHost ? uri.getHost() : trimmed;</span>
+    }
+
+    private static URI parseHttpUri(String trimmed) {
+        URI uri;
+        try {
+<span class="nc" id="L100">            uri = URI.create(trimmed);</span>
+<span class="nc" id="L101">        } catch (IllegalArgumentException e) {</span>
+<span class="nc" id="L102">            throw new ValidationException(&quot;URL 格式无效&quot;);</span>
+<span class="nc" id="L103">        }</span>
+<span class="nc" id="L104">        String scheme = uri.getScheme();</span>
+<span class="nc bnc" id="L105" title="All 6 branches missed.">        if (scheme == null || (!&quot;http&quot;.equalsIgnoreCase(scheme) &amp;&amp; !&quot;https&quot;.equalsIgnoreCase(scheme))) {</span>
+<span class="nc" id="L106">            throw new ValidationException(&quot;仅允许 http/https URL&quot;);</span>
+        }
+<span class="nc" id="L108">        String host = uri.getHost();</span>
+<span class="nc bnc" id="L109" title="All 4 branches missed.">        if (host == null || host.isEmpty()) {</span>
+<span class="nc" id="L110">            throw new ValidationException(&quot;URL 缺少主机名&quot;);</span>
+        }
+<span class="nc" id="L112">        return uri;</span>
+    }
+
+    private static boolean schemeEquals(URI left, URI right) {
+<span class="nc" id="L116">        return left.getScheme().equalsIgnoreCase(right.getScheme());</span>
+    }
+
+    private static boolean hostEquals(URI left, URI right) {
+<span class="nc" id="L120">        return left.getHost().equalsIgnoreCase(right.getHost());</span>
+    }
+
+    private static boolean portEquals(URI left, URI right) {
+<span class="nc bnc" id="L124" title="All 2 branches missed.">        return effectivePort(left) == effectivePort(right);</span>
+    }
+
+    private static int effectivePort(URI uri) {
+<span class="nc bnc" id="L128" title="All 2 branches missed.">        if (uri.getPort() &gt; 0) {</span>
+<span class="nc" id="L129">            return uri.getPort();</span>
+        }
+<span class="nc bnc" id="L131" title="All 2 branches missed.">        return &quot;https&quot;.equalsIgnoreCase(uri.getScheme()) ? 443 : 80;</span>
+    }
+
+    private static String normalizePath(String path) {
+<span class="nc bnc" id="L135" title="All 6 branches missed.">        if (path == null || path.isEmpty() || &quot;/&quot;.equals(path)) {</span>
+<span class="nc" id="L136">            return &quot;/&quot;;</span>
+        }
+<span class="nc bnc" id="L138" title="All 2 branches missed.">        return path.endsWith(&quot;/&quot;) ? path.substring(0, path.length() - 1) : path;</span>
+    }
+
+    private static boolean isBlockedAddress(InetAddress address) {
+<span class="nc bnc" id="L142" title="All 6 branches missed.">        if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress()) {</span>
+<span class="nc" id="L143">            return true;</span>
+        }
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        if (address.isSiteLocalAddress()) {</span>
+<span class="nc" id="L146">            return true;</span>
+        }
+<span class="nc" id="L148">        byte[] octets = address.getAddress();</span>
+<span class="nc bnc" id="L149" title="All 2 branches missed.">        if (octets.length == 4) {</span>
+<span class="nc" id="L150">            int b0 = octets[0] &amp; 0xFF;</span>
+<span class="nc" id="L151">            int b1 = octets[1] &amp; 0xFF;</span>
+<span class="nc bnc" id="L152" title="All 2 branches missed.">            if (b0 == 0) {</span>
+<span class="nc" id="L153">                return true;</span>
+            }
+<span class="nc bnc" id="L155" title="All 2 branches missed.">            if (b0 == 10) {</span>
+<span class="nc" id="L156">                return true;</span>
+            }
+<span class="nc bnc" id="L158" title="All 6 branches missed.">            if (b0 == 172 &amp;&amp; b1 &gt;= 16 &amp;&amp; b1 &lt;= 31) {</span>
+<span class="nc" id="L159">                return true;</span>
+            }
+<span class="nc bnc" id="L161" title="All 4 branches missed.">            if (b0 == 192 &amp;&amp; b1 == 168) {</span>
+<span class="nc" id="L162">                return true;</span>
+            }
+<span class="nc bnc" id="L164" title="All 4 branches missed.">            if (b0 == 169 &amp;&amp; b1 == 254) {</span>
+<span class="nc" id="L165">                return true;</span>
+            }
+        }
+<span class="nc" id="L168">        return false;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

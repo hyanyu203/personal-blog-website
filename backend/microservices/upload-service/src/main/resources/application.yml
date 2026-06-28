@@ -1,0 +1,12 @@
+﻿server:
+  port: 8007
+
+spring:
+  application:
+    name: upload-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

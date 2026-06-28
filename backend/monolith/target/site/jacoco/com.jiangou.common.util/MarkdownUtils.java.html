@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MarkdownUtils.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.common.util</a> &gt; <span class="el_source">MarkdownUtils.java</span></div><h1>MarkdownUtils.java</h1><pre class="source lang-java linenums">package com.jiangou.common.util;
+
+import com.jiangou.article.vo.TocItemVO;
+import org.commonmark.node.Node;
+import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.HtmlRenderer;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public final class MarkdownUtils {
+
+<span class="nc" id="L17">    private static final Pattern HEADING_PATTERN = Pattern.compile(&quot;^(#{1,6})\\s+(.+)$&quot;);</span>
+
+<span class="nc" id="L19">    private static final Parser PARSER = Parser.builder().build();</span>
+<span class="nc" id="L20">    private static final HtmlRenderer RENDERER = HtmlRenderer.builder().build();</span>
+
+    private MarkdownUtils() {
+    }
+
+    public static String toHtml(String markdown) {
+<span class="nc bnc" id="L26" title="All 4 branches missed.">        if (markdown == null || markdown.isEmpty()) {</span>
+<span class="nc" id="L27">            return &quot;&quot;;</span>
+        }
+<span class="nc" id="L29">        return toHtmlWithAnchors(markdown);</span>
+    }
+
+    public static String toHtmlWithAnchors(String markdown) {
+<span class="nc bnc" id="L33" title="All 4 branches missed.">        if (markdown == null || markdown.isEmpty()) {</span>
+<span class="nc" id="L34">            return &quot;&quot;;</span>
+        }
+<span class="nc" id="L36">        List&lt;TocItemVO&gt; toc = extractToc(markdown);</span>
+<span class="nc" id="L37">        Node document = PARSER.parse(markdown);</span>
+<span class="nc" id="L38">        String html = RENDERER.render(document);</span>
+<span class="nc bnc" id="L39" title="All 2 branches missed.">        if (toc.isEmpty()) {</span>
+<span class="nc" id="L40">            return HtmlSanitizer.sanitize(html);</span>
+        }
+<span class="nc" id="L42">        Pattern pattern = Pattern.compile(&quot;&lt;h([1-6])&gt;([^&lt;]+)&lt;/h\\1&gt;&quot;);</span>
+<span class="nc" id="L43">        Matcher matcher = pattern.matcher(html);</span>
+<span class="nc" id="L44">        StringBuffer sb = new StringBuffer();</span>
+<span class="nc" id="L45">        int index = 0;</span>
+<span class="nc bnc" id="L46" title="All 4 branches missed.">        while (matcher.find() &amp;&amp; index &lt; toc.size()) {</span>
+<span class="nc" id="L47">            String replacement = &quot;&lt;h&quot; + matcher.group(1) + &quot; id=\&quot;&quot; + toc.get(index).getId()</span>
+<span class="nc" id="L48">                    + &quot;\&quot;&gt;&quot; + matcher.group(2) + &quot;&lt;/h&quot; + matcher.group(1) + &quot;&gt;&quot;;</span>
+<span class="nc" id="L49">            matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));</span>
+<span class="nc" id="L50">            index++;</span>
+<span class="nc" id="L51">        }</span>
+<span class="nc" id="L52">        matcher.appendTail(sb);</span>
+<span class="nc" id="L53">        return HtmlSanitizer.sanitize(sb.toString());</span>
+    }
+
+    public static String toPlainText(String markdown) {
+<span class="nc bnc" id="L57" title="All 2 branches missed.">        if (markdown == null) {</span>
+<span class="nc" id="L58">            return &quot;&quot;;</span>
+        }
+<span class="nc" id="L60">        return markdown.replaceAll(&quot;[#*`&gt;_\\-\\[\\]()]&quot;, &quot; &quot;).replaceAll(&quot;\\s+&quot;, &quot; &quot;).trim();</span>
+    }
+
+    public static int countWords(String text) {
+<span class="nc bnc" id="L64" title="All 4 branches missed.">        if (text == null || text.isEmpty()) {</span>
+<span class="nc" id="L65">            return 0;</span>
+        }
+<span class="nc" id="L67">        return text.trim().split(&quot;\\s+&quot;).length;</span>
+    }
+
+    public static int estimateReadingMinutes(int wordCount) {
+<span class="nc" id="L71">        return Math.max(1, (int) Math.ceil(wordCount / 200.0));</span>
+    }
+
+    public static List&lt;TocItemVO&gt; extractToc(String markdown) {
+<span class="nc" id="L75">        List&lt;TocItemVO&gt; items = new ArrayList&lt;TocItemVO&gt;();</span>
+<span class="nc bnc" id="L76" title="All 4 branches missed.">        if (markdown == null || markdown.isEmpty()) {</span>
+<span class="nc" id="L77">            return items;</span>
+        }
+<span class="nc" id="L79">        Set&lt;String&gt; usedIds = new HashSet&lt;String&gt;();</span>
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        for (String line : markdown.split(&quot;\n&quot;)) {</span>
+<span class="nc" id="L81">            Matcher matcher = HEADING_PATTERN.matcher(line.trim());</span>
+<span class="nc bnc" id="L82" title="All 2 branches missed.">            if (!matcher.matches()) {</span>
+<span class="nc" id="L83">                continue;</span>
+            }
+<span class="nc" id="L85">            int level = matcher.group(1).length();</span>
+<span class="nc" id="L86">            String text = matcher.group(2).trim();</span>
+<span class="nc" id="L87">            String id = slugifyHeading(text);</span>
+<span class="nc" id="L88">            String uniqueId = id;</span>
+<span class="nc" id="L89">            int suffix = 2;</span>
+<span class="nc bnc" id="L90" title="All 2 branches missed.">            while (usedIds.contains(uniqueId)) {</span>
+<span class="nc" id="L91">                uniqueId = id + &quot;-&quot; + suffix++;</span>
+            }
+<span class="nc" id="L93">            usedIds.add(uniqueId);</span>
+<span class="nc" id="L94">            items.add(TocItemVO.builder().id(uniqueId).text(text).level(level).build());</span>
+        }
+<span class="nc" id="L96">        return items;</span>
+    }
+
+    private static String slugifyHeading(String text) {
+<span class="nc" id="L100">        String slug = text.toLowerCase()</span>
+<span class="nc" id="L101">                .replaceAll(&quot;[^a-z0-9\\u4e00-\\u9fa5\\s-]&quot;, &quot;&quot;)</span>
+<span class="nc" id="L102">                .replaceAll(&quot;\\s+&quot;, &quot;-&quot;)</span>
+<span class="nc" id="L103">                .replaceAll(&quot;-+&quot;, &quot;-&quot;);</span>
+<span class="nc bnc" id="L104" title="All 2 branches missed.">        return slug.isEmpty() ? &quot;section&quot; : slug;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

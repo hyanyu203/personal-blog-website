@@ -1,0 +1,759 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ArticleService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.article.service</a> &gt; <span class="el_source">ArticleService.java</span></div><h1>ArticleService.java</h1><pre class="source lang-java linenums">package com.jiangou.article.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jiangou.article.dto.CreateArticleDTO;
+import com.jiangou.article.dto.UpdateArticleDTO;
+import com.jiangou.article.entity.ArticleEntity;
+import com.jiangou.article.entity.ArticleTagEntity;
+import com.jiangou.article.entity.ArticleVersionEntity;
+import com.jiangou.article.mapper.ArticleMapper;
+import com.jiangou.article.mapper.ArticleTagMapper;
+import com.jiangou.article.mapper.ArticleVersionMapper;
+import com.jiangou.article.vo.ArchiveArticleRow;
+import com.jiangou.article.vo.ArchiveGroupVO;
+import com.jiangou.article.vo.ArticleDetailVO;
+import com.jiangou.article.vo.ArticlePublishResult;
+import com.jiangou.article.vo.ArticleListItemVO;
+import com.jiangou.article.vo.ArticleVersionDiffVO;
+import com.jiangou.article.vo.ArticleVersionVO;
+import com.github.difflib.DiffUtils;
+import com.github.difflib.patch.AbstractDelta;
+import com.github.difflib.patch.DeltaType;
+import com.github.difflib.patch.Patch;
+import com.jiangou.article.vo.TocItemVO;
+import com.jiangou.category.entity.CategoryEntity;
+import com.jiangou.category.mapper.CategoryMapper;
+import com.jiangou.common.exception.NotFoundException;
+import com.jiangou.common.exception.ValidationException;
+import com.jiangou.common.result.PageResult;
+import com.jiangou.common.service.ContentCounterService;
+import com.jiangou.common.util.MarkdownUtils;
+import com.jiangou.tag.entity.TagEntity;
+import com.jiangou.tag.mapper.TagMapper;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Service
+public class ArticleService {
+
+    private final ArticleMapper articleMapper;
+    private final ArticleTagMapper articleTagMapper;
+    private final ArticleVersionMapper articleVersionMapper;
+    private final CategoryMapper categoryMapper;
+    private final TagMapper tagMapper;
+    private final ArticleLikeService articleLikeService;
+    private final ContentCounterService contentCounterService;
+
+    public ArticleService(ArticleMapper articleMapper, ArticleTagMapper articleTagMapper,
+                           ArticleVersionMapper articleVersionMapper,
+                           CategoryMapper categoryMapper, TagMapper tagMapper,
+                           ArticleLikeService articleLikeService,
+<span class="nc" id="L65">                           ContentCounterService contentCounterService) {</span>
+<span class="nc" id="L66">        this.articleMapper = articleMapper;</span>
+<span class="nc" id="L67">        this.articleTagMapper = articleTagMapper;</span>
+<span class="nc" id="L68">        this.articleVersionMapper = articleVersionMapper;</span>
+<span class="nc" id="L69">        this.categoryMapper = categoryMapper;</span>
+<span class="nc" id="L70">        this.tagMapper = tagMapper;</span>
+<span class="nc" id="L71">        this.articleLikeService = articleLikeService;</span>
+<span class="nc" id="L72">        this.contentCounterService = contentCounterService;</span>
+<span class="nc" id="L73">    }</span>
+
+    public PageResult&lt;ArticleListItemVO&gt; listPublic(long page, long pageSize, String categorySlug,
+                                                    String tagSlug, String keyword) {
+<span class="nc" id="L77">        LambdaQueryWrapper&lt;ArticleEntity&gt; wrapper = basePublishedWrapper();</span>
+<span class="nc" id="L78">        applyFilters(wrapper, categorySlug, tagSlug, keyword);</span>
+<span class="nc" id="L79">        wrapper.orderByDesc(ArticleEntity::getPinned).orderByDesc(ArticleEntity::getPublishedAt);</span>
+<span class="nc" id="L80">        Page&lt;ArticleEntity&gt; result = articleMapper.selectPage(new Page&lt;&gt;(page, pageSize), wrapper);</span>
+<span class="nc" id="L81">        List&lt;ArticleListItemVO&gt; items = toListItems(result.getRecords());</span>
+<span class="nc" id="L82">        return PageResult.of(items, result.getTotal(), page, pageSize);</span>
+    }
+
+    public PageResult&lt;ArticleListItemVO&gt; listAdmin(long page, long pageSize, String status, String keyword) {
+<span class="nc" id="L86">        LambdaQueryWrapper&lt;ArticleEntity&gt; wrapper = new LambdaQueryWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L87">                .isNull(ArticleEntity::getDeletedAt);</span>
+<span class="nc bnc" id="L88" title="All 2 branches missed.">        if (StringUtils.hasText(status)) {</span>
+<span class="nc" id="L89">            wrapper.eq(ArticleEntity::getStatus, status);</span>
+        }
+<span class="nc bnc" id="L91" title="All 2 branches missed.">        if (StringUtils.hasText(keyword)) {</span>
+<span class="nc" id="L92">            wrapper.and(w -&gt; w.like(ArticleEntity::getTitle, keyword)</span>
+<span class="nc" id="L93">                    .or().like(ArticleEntity::getSummary, keyword));</span>
+        }
+<span class="nc" id="L95">        wrapper.orderByDesc(ArticleEntity::getUpdatedAt);</span>
+<span class="nc" id="L96">        Page&lt;ArticleEntity&gt; result = articleMapper.selectPage(new Page&lt;&gt;(page, pageSize), wrapper);</span>
+<span class="nc" id="L97">        List&lt;ArticleListItemVO&gt; items = toListItems(result.getRecords());</span>
+<span class="nc" id="L98">        return PageResult.of(items, result.getTotal(), page, pageSize);</span>
+    }
+
+    public ArticleDetailVO getBySlugPublic(String slug) {
+<span class="nc" id="L102">        ArticleEntity entity = articleMapper.selectOne(basePublishedWrapper().eq(ArticleEntity::getSlug, slug));</span>
+<span class="nc bnc" id="L103" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L104">            throw new NotFoundException(&quot;文章不存在&quot;);</span>
+        }
+<span class="nc" id="L106">        contentCounterService.incrementArticleViewCount(entity);</span>
+<span class="nc" id="L107">        return toDetail(entity, false);</span>
+    }
+
+    public ArticleDetailVO getByIdAdmin(Long id) {
+<span class="nc" id="L111">        ArticleEntity entity = findActive(id);</span>
+<span class="nc" id="L112">        return toDetail(entity, true);</span>
+    }
+
+    @Transactional
+    public ArticleDetailVO create(CreateArticleDTO dto, Long authorId) {
+<span class="nc" id="L117">        validateCategoryId(dto.getCategoryId());</span>
+<span class="nc" id="L118">        validateTagIds(dto.getTagIds());</span>
+<span class="nc" id="L119">        ensureSlugUnique(dto.getSlug(), null);</span>
+<span class="nc" id="L120">        ArticleEntity entity = new ArticleEntity();</span>
+<span class="nc" id="L121">        entity.setAuthorId(authorId);</span>
+<span class="nc" id="L122">        entity.setTitle(dto.getTitle());</span>
+<span class="nc" id="L123">        entity.setSlug(dto.getSlug());</span>
+<span class="nc" id="L124">        entity.setSummary(dto.getSummary());</span>
+<span class="nc bnc" id="L125" title="All 2 branches missed.">        entity.setContentMd(dto.getContentMd() == null ? &quot;&quot; : dto.getContentMd());</span>
+<span class="nc" id="L126">        entity.setCategoryId(dto.getCategoryId());</span>
+<span class="nc" id="L127">        entity.setStatus(&quot;draft&quot;);</span>
+<span class="nc bnc" id="L128" title="All 2 branches missed.">        entity.setVisibility(dto.getVisibility() == null ? &quot;public&quot; : dto.getVisibility());</span>
+<span class="nc" id="L129">        entity.setPinned(Boolean.TRUE.equals(dto.getPinned()));</span>
+<span class="nc" id="L130">        entity.setGithubRepo(dto.getGithubRepo());</span>
+<span class="nc" id="L131">        entity.setGithubCommitSha(dto.getGithubCommitSha());</span>
+<span class="nc" id="L132">        entity.setVersion(1);</span>
+<span class="nc" id="L133">        entity.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L134">        entity.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L135">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L136">        applyContentFields(entity);</span>
+<span class="nc" id="L137">        articleMapper.insert(entity);</span>
+<span class="nc" id="L138">        saveTags(entity.getId(), dto.getTagIds());</span>
+<span class="nc" id="L139">        return toDetail(entity, true);</span>
+    }
+
+    @Transactional
+    public ArticleDetailVO update(Long id, UpdateArticleDTO dto) {
+<span class="nc" id="L144">        ArticleEntity entity = findActive(id);</span>
+<span class="nc" id="L145">        boolean wasCounted = isCountedInTaxonomy(entity);</span>
+<span class="nc" id="L146">        Long oldCategoryId = entity.getCategoryId();</span>
+<span class="nc" id="L147">        List&lt;Long&gt; oldTagIds = loadTagIds(id);</span>
+<span class="nc bnc" id="L148" title="All 2 branches missed.">        if (StringUtils.hasText(dto.getSlug())) {</span>
+<span class="nc" id="L149">            ensureSlugUnique(dto.getSlug(), id);</span>
+<span class="nc" id="L150">            entity.setSlug(dto.getSlug());</span>
+        }
+<span class="nc bnc" id="L152" title="All 2 branches missed.">        if (StringUtils.hasText(dto.getTitle())) {</span>
+<span class="nc" id="L153">            entity.setTitle(dto.getTitle());</span>
+        }
+<span class="nc bnc" id="L155" title="All 2 branches missed.">        if (dto.getSummary() != null) {</span>
+<span class="nc" id="L156">            entity.setSummary(dto.getSummary());</span>
+        }
+<span class="nc bnc" id="L158" title="All 2 branches missed.">        if (dto.getContentMd() != null) {</span>
+<span class="nc" id="L159">            entity.setContentMd(dto.getContentMd());</span>
+        }
+<span class="nc bnc" id="L161" title="All 2 branches missed.">        if (dto.getCategoryId() != null) {</span>
+<span class="nc" id="L162">            validateCategoryId(dto.getCategoryId());</span>
+<span class="nc" id="L163">            entity.setCategoryId(dto.getCategoryId());</span>
+        }
+<span class="nc bnc" id="L165" title="All 2 branches missed.">        if (dto.getTagIds() != null) {</span>
+<span class="nc" id="L166">            validateTagIds(dto.getTagIds());</span>
+        }
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        if (dto.getVisibility() != null) {</span>
+<span class="nc" id="L169">            entity.setVisibility(dto.getVisibility());</span>
+        }
+<span class="nc bnc" id="L171" title="All 2 branches missed.">        if (dto.getPinned() != null) {</span>
+<span class="nc" id="L172">            entity.setPinned(dto.getPinned());</span>
+        }
+<span class="nc bnc" id="L174" title="All 2 branches missed.">        if (dto.getGithubRepo() != null) {</span>
+<span class="nc" id="L175">            entity.setGithubRepo(dto.getGithubRepo());</span>
+        }
+<span class="nc bnc" id="L177" title="All 2 branches missed.">        if (dto.getGithubCommitSha() != null) {</span>
+<span class="nc" id="L178">            entity.setGithubCommitSha(dto.getGithubCommitSha());</span>
+        }
+<span class="nc" id="L180">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L181">        applyContentFields(entity);</span>
+<span class="nc" id="L182">        articleMapper.updateById(entity);</span>
+<span class="nc bnc" id="L183" title="All 2 branches missed.">        if (dto.getTagIds() != null) {</span>
+<span class="nc" id="L184">            articleTagMapper.delete(new LambdaQueryWrapper&lt;ArticleTagEntity&gt;()</span>
+<span class="nc" id="L185">                    .eq(ArticleTagEntity::getArticleId, id));</span>
+<span class="nc" id="L186">            saveTags(id, dto.getTagIds());</span>
+        }
+<span class="nc bnc" id="L188" title="All 2 branches missed.">        syncTaxonomyCountersAfterUpdate(entity, wasCounted, oldCategoryId, oldTagIds, dto.getTagIds() != null);</span>
+<span class="nc" id="L189">        return toDetail(entity, true);</span>
+    }
+
+    @Transactional
+    public void delete(Long id) {
+<span class="nc" id="L194">        ArticleEntity entity = findActive(id);</span>
+<span class="nc" id="L195">        boolean wasCounted = isCountedInTaxonomy(entity);</span>
+<span class="nc" id="L196">        entity.setDeletedAt(LocalDateTime.now());</span>
+<span class="nc" id="L197">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L198">        articleMapper.updateById(entity);</span>
+<span class="nc bnc" id="L199" title="All 2 branches missed.">        if (wasCounted) {</span>
+<span class="nc" id="L200">            contentCounterService.adjustPublishedArticleTaxonomyCounts(entity, -1);</span>
+        }
+<span class="nc" id="L202">    }</span>
+
+    @Transactional
+    public ArticlePublishResult publish(Long id, Long userId) {
+<span class="nc" id="L206">        ArticleEntity entity = findActive(id);</span>
+<span class="nc" id="L207">        boolean wasCounted = isCountedInTaxonomy(entity);</span>
+<span class="nc bnc" id="L208" title="All 4 branches missed.">        if (!StringUtils.hasText(entity.getTitle()) || !StringUtils.hasText(entity.getSlug())</span>
+<span class="nc bnc" id="L209" title="All 2 branches missed.">                || !StringUtils.hasText(entity.getContentMd())) {</span>
+<span class="nc" id="L210">            throw new ValidationException(&quot;发布前需填写标题、slug 和正文&quot;);</span>
+        }
+<span class="nc" id="L212">        validateCategoryId(entity.getCategoryId());</span>
+<span class="nc" id="L213">        validateTagIds(loadTagIds(id));</span>
+<span class="nc" id="L214">        saveVersion(entity, userId, &quot;发布&quot;);</span>
+<span class="nc" id="L215">        entity.setStatus(&quot;published&quot;);</span>
+<span class="nc" id="L216">        entity.setPublishedAt(LocalDateTime.now());</span>
+<span class="nc" id="L217">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L218">        applyContentFields(entity);</span>
+<span class="nc" id="L219">        articleMapper.updateById(entity);</span>
+<span class="nc bnc" id="L220" title="All 4 branches missed.">        if (!wasCounted &amp;&amp; isCountedInTaxonomy(entity)) {</span>
+<span class="nc" id="L221">            contentCounterService.adjustPublishedArticleTaxonomyCounts(entity, 1);</span>
+        }
+<span class="nc bnc" id="L223" title="All 4 branches missed.">        boolean sendNewsletter = isNewsletterEligible(entity) &amp;&amp; claimNewsletterSend(id);</span>
+<span class="nc" id="L224">        return new ArticlePublishResult(toDetail(entity, true), sendNewsletter);</span>
+    }
+
+    private boolean isNewsletterEligible(ArticleEntity entity) {
+<span class="nc bnc" id="L228" title="All 4 branches missed.">        return entity.getNewsletterSentAt() == null &amp;&amp; &quot;public&quot;.equalsIgnoreCase(entity.getVisibility());</span>
+    }
+
+    /**
+     * Atomically marks newsletter as dispatched so concurrent publish calls cannot double-send.
+     */
+    public boolean claimNewsletterSend(Long id) {
+<span class="nc" id="L235">        int updated = articleMapper.update(null, new LambdaUpdateWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L236">                .eq(ArticleEntity::getId, id)</span>
+<span class="nc" id="L237">                .isNull(ArticleEntity::getDeletedAt)</span>
+<span class="nc" id="L238">                .isNull(ArticleEntity::getNewsletterSentAt)</span>
+<span class="nc" id="L239">                .set(ArticleEntity::getNewsletterSentAt, LocalDateTime.now())</span>
+<span class="nc" id="L240">                .set(ArticleEntity::getUpdatedAt, LocalDateTime.now()));</span>
+<span class="nc bnc" id="L241" title="All 2 branches missed.">        return updated &gt; 0;</span>
+    }
+
+    @Transactional
+    public ArticleDetailVO publish(Long id) {
+<span class="nc" id="L246">        return publish(id, null).getArticle();</span>
+    }
+
+    @Transactional
+    public void markNewsletterSent(Long id) {
+<span class="nc" id="L251">        ArticleEntity entity = findActive(id);</span>
+<span class="nc" id="L252">        entity.setNewsletterSentAt(LocalDateTime.now());</span>
+<span class="nc" id="L253">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L254">        articleMapper.updateById(entity);</span>
+<span class="nc" id="L255">    }</span>
+
+    @Transactional
+    public ArticleDetailVO unpublish(Long id) {
+<span class="nc" id="L259">        ArticleEntity entity = findActive(id);</span>
+<span class="nc" id="L260">        boolean wasCounted = isCountedInTaxonomy(entity);</span>
+<span class="nc" id="L261">        entity.setStatus(&quot;draft&quot;);</span>
+<span class="nc" id="L262">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L263">        articleMapper.updateById(entity);</span>
+<span class="nc bnc" id="L264" title="All 2 branches missed.">        if (wasCounted) {</span>
+<span class="nc" id="L265">            contentCounterService.adjustPublishedArticleTaxonomyCounts(entity, -1);</span>
+        }
+<span class="nc" id="L267">        return toDetail(entity, true);</span>
+    }
+
+    @Transactional
+    public ArticleDetailVO archive(Long id) {
+<span class="nc" id="L272">        ArticleEntity entity = findActive(id);</span>
+<span class="nc" id="L273">        boolean wasCounted = isCountedInTaxonomy(entity);</span>
+<span class="nc" id="L274">        entity.setStatus(&quot;archived&quot;);</span>
+<span class="nc" id="L275">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L276">        articleMapper.updateById(entity);</span>
+<span class="nc bnc" id="L277" title="All 2 branches missed.">        if (wasCounted) {</span>
+<span class="nc" id="L278">            contentCounterService.adjustPublishedArticleTaxonomyCounts(entity, -1);</span>
+        }
+<span class="nc" id="L280">        return toDetail(entity, true);</span>
+    }
+
+    public List&lt;TocItemVO&gt; getToc(Long id) {
+<span class="nc" id="L284">        ArticleEntity entity = articleMapper.selectOne(basePublishedWrapper().eq(ArticleEntity::getId, id));</span>
+<span class="nc bnc" id="L285" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L286">            throw new NotFoundException(&quot;文章不存在&quot;);</span>
+        }
+<span class="nc" id="L288">        return MarkdownUtils.extractToc(entity.getContentMd());</span>
+    }
+
+    public List&lt;ArticleListItemVO&gt; listRelated(Long id, int limit) {
+<span class="nc" id="L292">        int cappedLimit = Math.min(Math.max(1, limit), 100);</span>
+<span class="nc" id="L293">        ArticleEntity entity = articleMapper.selectOne(basePublishedWrapper().eq(ArticleEntity::getId, id));</span>
+<span class="nc bnc" id="L294" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L295">            throw new NotFoundException(&quot;文章不存在&quot;);</span>
+        }
+<span class="nc" id="L297">        List&lt;ArticleTagEntity&gt; links = articleTagMapper.selectList(new LambdaQueryWrapper&lt;ArticleTagEntity&gt;()</span>
+<span class="nc" id="L298">                .eq(ArticleTagEntity::getArticleId, id));</span>
+<span class="nc bnc" id="L299" title="All 2 branches missed.">        if (links.isEmpty()) {</span>
+<span class="nc" id="L300">            return listRelatedByCategory(entity, cappedLimit);</span>
+        }
+<span class="nc" id="L302">        List&lt;Long&gt; tagIds = links.stream().map(ArticleTagEntity::getTagId).collect(Collectors.toList());</span>
+<span class="nc" id="L303">        List&lt;ArticleTagEntity&gt; relatedLinks = articleTagMapper.selectList(new LambdaQueryWrapper&lt;ArticleTagEntity&gt;()</span>
+<span class="nc" id="L304">                .in(ArticleTagEntity::getTagId, tagIds)</span>
+<span class="nc" id="L305">                .ne(ArticleTagEntity::getArticleId, id));</span>
+<span class="nc bnc" id="L306" title="All 2 branches missed.">        if (relatedLinks.isEmpty()) {</span>
+<span class="nc" id="L307">            return listRelatedByCategory(entity, cappedLimit);</span>
+        }
+<span class="nc" id="L309">        List&lt;Long&gt; articleIds = relatedLinks.stream()</span>
+<span class="nc" id="L310">                .map(ArticleTagEntity::getArticleId)</span>
+<span class="nc" id="L311">                .distinct()</span>
+<span class="nc" id="L312">                .collect(Collectors.toList());</span>
+<span class="nc" id="L313">        List&lt;ArticleEntity&gt; articles = articleMapper.selectList(basePublishedWrapper()</span>
+<span class="nc" id="L314">                .in(ArticleEntity::getId, articleIds)</span>
+<span class="nc" id="L315">                .orderByDesc(ArticleEntity::getPublishedAt)</span>
+<span class="nc" id="L316">                .last(&quot;LIMIT &quot; + cappedLimit));</span>
+<span class="nc" id="L317">        return toListItems(articles);</span>
+    }
+
+    public List&lt;ArticleVersionVO&gt; listVersions(Long articleId) {
+<span class="nc" id="L321">        findActive(articleId);</span>
+<span class="nc" id="L322">        List&lt;ArticleVersionEntity&gt; versions = articleVersionMapper.selectList(</span>
+                new LambdaQueryWrapper&lt;ArticleVersionEntity&gt;()
+<span class="nc" id="L324">                        .eq(ArticleVersionEntity::getArticleId, articleId)</span>
+<span class="nc" id="L325">                        .orderByDesc(ArticleVersionEntity::getVersion));</span>
+<span class="nc" id="L326">        return versions.stream().map(v -&gt; ArticleVersionVO.builder()</span>
+<span class="nc" id="L327">                .version(v.getVersion())</span>
+<span class="nc" id="L328">                .title(v.getTitle())</span>
+<span class="nc" id="L329">                .changeNote(v.getChangeNote())</span>
+<span class="nc" id="L330">                .createdAt(v.getCreatedAt())</span>
+<span class="nc" id="L331">                .build()).collect(Collectors.toList());</span>
+    }
+
+    public ArticleVersionDiffVO diffVersions(Long articleId, Integer fromVersion, Integer toVersion) {
+<span class="nc" id="L335">        ArticleEntity article = findActive(articleId);</span>
+<span class="nc bnc" id="L336" title="All 2 branches missed.">        Integer effectiveTo = toVersion != null ? toVersion : article.getVersion();</span>
+<span class="nc" id="L337">        String fromContent = resolveVersionContent(articleId, fromVersion, article);</span>
+<span class="nc" id="L338">        String toContent = resolveVersionContent(articleId, effectiveTo, article);</span>
+
+<span class="nc" id="L340">        List&lt;String&gt; fromLines = splitLines(fromContent);</span>
+<span class="nc" id="L341">        List&lt;String&gt; toLines = splitLines(toContent);</span>
+<span class="nc" id="L342">        Patch&lt;String&gt; patch = DiffUtils.diff(fromLines, toLines);</span>
+
+<span class="nc" id="L344">        List&lt;ArticleVersionDiffVO.DiffLine&gt; lines = new ArrayList&lt;ArticleVersionDiffVO.DiffLine&gt;();</span>
+<span class="nc bnc" id="L345" title="All 2 branches missed.">        for (AbstractDelta&lt;String&gt; delta : patch.getDeltas()) {</span>
+<span class="nc" id="L346">            DeltaType type = delta.getType();</span>
+<span class="nc bnc" id="L347" title="All 4 branches missed.">            if (type == DeltaType.DELETE || type == DeltaType.CHANGE) {</span>
+<span class="nc bnc" id="L348" title="All 2 branches missed.">                for (String line : delta.getSource().getLines()) {</span>
+<span class="nc" id="L349">                    lines.add(ArticleVersionDiffVO.DiffLine.builder().type(&quot;DELETE&quot;).content(line).build());</span>
+<span class="nc" id="L350">                }</span>
+            }
+<span class="nc bnc" id="L352" title="All 4 branches missed.">            if (type == DeltaType.INSERT || type == DeltaType.CHANGE) {</span>
+<span class="nc bnc" id="L353" title="All 2 branches missed.">                for (String line : delta.getTarget().getLines()) {</span>
+<span class="nc" id="L354">                    lines.add(ArticleVersionDiffVO.DiffLine.builder().type(&quot;INSERT&quot;).content(line).build());</span>
+<span class="nc" id="L355">                }</span>
+            }
+<span class="nc" id="L357">        }</span>
+
+<span class="nc" id="L359">        return ArticleVersionDiffVO.builder()</span>
+<span class="nc" id="L360">                .fromVersion(fromVersion)</span>
+<span class="nc" id="L361">                .toVersion(effectiveTo)</span>
+<span class="nc" id="L362">                .lines(lines)</span>
+<span class="nc" id="L363">                .build();</span>
+    }
+
+    private String resolveVersionContent(Long articleId, Integer version, ArticleEntity current) {
+<span class="nc bnc" id="L367" title="All 4 branches missed.">        if (version == null || version.equals(current.getVersion())) {</span>
+<span class="nc bnc" id="L368" title="All 2 branches missed.">            return current.getContentMd() == null ? &quot;&quot; : current.getContentMd();</span>
+        }
+<span class="nc" id="L370">        ArticleVersionEntity snapshot = articleVersionMapper.selectOne(</span>
+                new LambdaQueryWrapper&lt;ArticleVersionEntity&gt;()
+<span class="nc" id="L372">                        .eq(ArticleVersionEntity::getArticleId, articleId)</span>
+<span class="nc" id="L373">                        .eq(ArticleVersionEntity::getVersion, version));</span>
+<span class="nc bnc" id="L374" title="All 2 branches missed.">        if (snapshot == null) {</span>
+<span class="nc" id="L375">            throw new NotFoundException(&quot;版本不存在: &quot; + version);</span>
+        }
+<span class="nc bnc" id="L377" title="All 2 branches missed.">        return snapshot.getContentMd() == null ? &quot;&quot; : snapshot.getContentMd();</span>
+    }
+
+    private List&lt;String&gt; splitLines(String content) {
+<span class="nc bnc" id="L381" title="All 2 branches missed.">        if (!StringUtils.hasText(content)) {</span>
+<span class="nc" id="L382">            return Collections.singletonList(&quot;&quot;);</span>
+        }
+<span class="nc" id="L384">        String normalized = content.replace(&quot;\r\n&quot;, &quot;\n&quot;);</span>
+<span class="nc" id="L385">        return java.util.Arrays.asList(normalized.split(&quot;\n&quot;, -1));</span>
+    }
+
+    @Transactional
+    public ArticleDetailVO restoreVersion(Long articleId, Integer version, Long userId) {
+<span class="nc" id="L390">        ArticleEntity entity = findActive(articleId);</span>
+<span class="nc" id="L391">        ArticleVersionEntity snapshot = articleVersionMapper.selectOne(</span>
+                new LambdaQueryWrapper&lt;ArticleVersionEntity&gt;()
+<span class="nc" id="L393">                        .eq(ArticleVersionEntity::getArticleId, articleId)</span>
+<span class="nc" id="L394">                        .eq(ArticleVersionEntity::getVersion, version));</span>
+<span class="nc bnc" id="L395" title="All 2 branches missed.">        if (snapshot == null) {</span>
+<span class="nc" id="L396">            throw new NotFoundException(&quot;版本不存在&quot;);</span>
+        }
+<span class="nc" id="L398">        saveVersion(entity, userId, &quot;恢复前快照&quot;);</span>
+<span class="nc" id="L399">        entity.setTitle(snapshot.getTitle());</span>
+<span class="nc" id="L400">        entity.setContentMd(snapshot.getContentMd());</span>
+<span class="nc" id="L401">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L402">        applyContentFields(entity);</span>
+<span class="nc" id="L403">        articleMapper.updateById(entity);</span>
+<span class="nc" id="L404">        return toDetail(entity, true);</span>
+    }
+
+    private List&lt;ArticleListItemVO&gt; listRelatedByCategory(ArticleEntity entity, int limit) {
+<span class="nc bnc" id="L408" title="All 2 branches missed.">        if (entity.getCategoryId() == null) {</span>
+<span class="nc" id="L409">            return Collections.emptyList();</span>
+        }
+<span class="nc" id="L411">        List&lt;ArticleEntity&gt; articles = articleMapper.selectList(basePublishedWrapper()</span>
+<span class="nc" id="L412">                .eq(ArticleEntity::getCategoryId, entity.getCategoryId())</span>
+<span class="nc" id="L413">                .ne(ArticleEntity::getId, entity.getId())</span>
+<span class="nc" id="L414">                .orderByDesc(ArticleEntity::getPublishedAt)</span>
+<span class="nc" id="L415">                .last(&quot;LIMIT &quot; + limit));</span>
+<span class="nc" id="L416">        return toListItems(articles);</span>
+    }
+
+    private void saveVersion(ArticleEntity entity, Long userId, String changeNote) {
+<span class="nc" id="L420">        ArticleVersionEntity version = new ArticleVersionEntity();</span>
+<span class="nc" id="L421">        version.setArticleId(entity.getId());</span>
+<span class="nc bnc" id="L422" title="All 2 branches missed.">        version.setVersion(entity.getVersion() == null ? 1 : entity.getVersion());</span>
+<span class="nc" id="L423">        version.setTitle(entity.getTitle());</span>
+<span class="nc bnc" id="L424" title="All 2 branches missed.">        version.setContentMd(entity.getContentMd() == null ? &quot;&quot; : entity.getContentMd());</span>
+<span class="nc" id="L425">        version.setContentHtml(entity.getContentHtml());</span>
+<span class="nc" id="L426">        version.setChangeNote(changeNote);</span>
+<span class="nc bnc" id="L427" title="All 2 branches missed.">        version.setCreatedBy(userId == null ? entity.getAuthorId() : userId);</span>
+<span class="nc" id="L428">        version.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L429">        version.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L430">        articleVersionMapper.insert(version);</span>
+<span class="nc bnc" id="L431" title="All 2 branches missed.">        entity.setVersion((entity.getVersion() == null ? 1 : entity.getVersion()) + 1);</span>
+<span class="nc" id="L432">    }</span>
+
+    private void syncTaxonomyCountersAfterUpdate(ArticleEntity entity, boolean wasCounted,
+                                                 Long oldCategoryId, List&lt;Long&gt; oldTagIds,
+                                                 boolean tagsChanged) {
+<span class="nc" id="L437">        boolean isCounted = isCountedInTaxonomy(entity);</span>
+<span class="nc bnc" id="L438" title="All 4 branches missed.">        if (wasCounted &amp;&amp; isCounted) {</span>
+<span class="nc" id="L439">            contentCounterService.movePublishedArticleCategory(oldCategoryId, entity.getCategoryId());</span>
+<span class="nc bnc" id="L440" title="All 2 branches missed.">            if (tagsChanged) {</span>
+<span class="nc" id="L441">                contentCounterService.syncPublishedArticleTags(oldTagIds, loadTagIds(entity.getId()));</span>
+            }
+<span class="nc" id="L443">            return;</span>
+        }
+<span class="nc bnc" id="L445" title="All 2 branches missed.">        if (wasCounted) {</span>
+<span class="nc" id="L446">            contentCounterService.adjustPublishedArticleTaxonomyCounts(oldCategoryId, oldTagIds, -1);</span>
+<span class="nc" id="L447">            return;</span>
+        }
+<span class="nc bnc" id="L449" title="All 2 branches missed.">        if (isCounted) {</span>
+<span class="nc" id="L450">            contentCounterService.adjustPublishedArticleTaxonomyCounts(entity, 1);</span>
+        }
+<span class="nc" id="L452">    }</span>
+
+    private boolean isCountedInTaxonomy(ArticleEntity entity) {
+<span class="nc bnc" id="L455" title="All 2 branches missed.">        return entity != null</span>
+<span class="nc bnc" id="L456" title="All 2 branches missed.">                &amp;&amp; &quot;published&quot;.equals(entity.getStatus())</span>
+<span class="nc bnc" id="L457" title="All 2 branches missed.">                &amp;&amp; &quot;public&quot;.equals(entity.getVisibility())</span>
+<span class="nc bnc" id="L458" title="All 2 branches missed.">                &amp;&amp; entity.getDeletedAt() == null;</span>
+    }
+
+    private LambdaQueryWrapper&lt;ArticleEntity&gt; basePublishedWrapper() {
+<span class="nc" id="L462">        return new LambdaQueryWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L463">                .eq(ArticleEntity::getStatus, &quot;published&quot;)</span>
+<span class="nc" id="L464">                .eq(ArticleEntity::getVisibility, &quot;public&quot;)</span>
+<span class="nc" id="L465">                .isNull(ArticleEntity::getDeletedAt);</span>
+    }
+
+    private void applyFilters(LambdaQueryWrapper&lt;ArticleEntity&gt; wrapper, String categorySlug,
+                              String tagSlug, String keyword) {
+<span class="nc bnc" id="L470" title="All 2 branches missed.">        if (StringUtils.hasText(categorySlug)) {</span>
+<span class="nc" id="L471">            CategoryEntity category = categoryMapper.selectOne(new LambdaQueryWrapper&lt;CategoryEntity&gt;()</span>
+<span class="nc" id="L472">                    .eq(CategoryEntity::getSlug, categorySlug).isNull(CategoryEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L473" title="All 2 branches missed.">            if (category != null) {</span>
+<span class="nc" id="L474">                wrapper.eq(ArticleEntity::getCategoryId, category.getId());</span>
+            } else {
+<span class="nc" id="L476">                wrapper.eq(ArticleEntity::getId, -1L);</span>
+            }
+        }
+<span class="nc bnc" id="L479" title="All 2 branches missed.">        if (StringUtils.hasText(tagSlug)) {</span>
+<span class="nc" id="L480">            TagEntity tag = tagMapper.selectOne(new LambdaQueryWrapper&lt;TagEntity&gt;()</span>
+<span class="nc" id="L481">                    .eq(TagEntity::getSlug, tagSlug).isNull(TagEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L482" title="All 2 branches missed.">            if (tag != null) {</span>
+<span class="nc" id="L483">                wrapper.apply(&quot;EXISTS (SELECT 1 FROM article_tags at WHERE at.article_id = articles.id &quot;</span>
+<span class="nc" id="L484">                        + &quot;AND at.tag_id = {0})&quot;, tag.getId());</span>
+            } else {
+<span class="nc" id="L486">                wrapper.eq(ArticleEntity::getId, -1L);</span>
+            }
+        }
+<span class="nc bnc" id="L489" title="All 2 branches missed.">        if (StringUtils.hasText(keyword)) {</span>
+<span class="nc" id="L490">            wrapper.and(w -&gt; w.like(ArticleEntity::getTitle, keyword)</span>
+<span class="nc" id="L491">                    .or().like(ArticleEntity::getSummary, keyword)</span>
+<span class="nc" id="L492">                    .or().like(ArticleEntity::getContentText, keyword));</span>
+        }
+<span class="nc" id="L494">    }</span>
+
+    private void validateCategoryId(Long categoryId) {
+<span class="nc bnc" id="L497" title="All 2 branches missed.">        if (categoryId == null) {</span>
+<span class="nc" id="L498">            return;</span>
+        }
+<span class="nc" id="L500">        CategoryEntity category = categoryMapper.selectOne(new LambdaQueryWrapper&lt;CategoryEntity&gt;()</span>
+<span class="nc" id="L501">                .eq(CategoryEntity::getId, categoryId)</span>
+<span class="nc" id="L502">                .isNull(CategoryEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L503" title="All 2 branches missed.">        if (category == null) {</span>
+<span class="nc" id="L504">            throw new ValidationException(&quot;分类不存在&quot;);</span>
+        }
+<span class="nc" id="L506">    }</span>
+
+    private void validateTagIds(List&lt;Long&gt; tagIds) {
+<span class="nc" id="L509">        List&lt;Long&gt; normalized = normalizeTagIds(tagIds);</span>
+<span class="nc bnc" id="L510" title="All 2 branches missed.">        if (normalized.isEmpty()) {</span>
+<span class="nc" id="L511">            return;</span>
+        }
+<span class="nc" id="L513">        List&lt;TagEntity&gt; tags = tagMapper.selectBatchIds(normalized);</span>
+<span class="nc" id="L514">        Set&lt;Long&gt; activeIds = tags.stream()</span>
+<span class="nc bnc" id="L515" title="All 2 branches missed.">                .filter(tag -&gt; tag.getDeletedAt() == null)</span>
+<span class="nc" id="L516">                .map(TagEntity::getId)</span>
+<span class="nc" id="L517">                .collect(Collectors.toSet());</span>
+<span class="nc bnc" id="L518" title="All 2 branches missed.">        for (Long tagId : normalized) {</span>
+<span class="nc bnc" id="L519" title="All 2 branches missed.">            if (!activeIds.contains(tagId)) {</span>
+<span class="nc" id="L520">                throw new ValidationException(&quot;标签不存在&quot;);</span>
+            }
+<span class="nc" id="L522">        }</span>
+<span class="nc" id="L523">    }</span>
+
+    private void ensureSlugUnique(String slug, Long excludeId) {
+<span class="nc" id="L526">        LambdaQueryWrapper&lt;ArticleEntity&gt; wrapper = new LambdaQueryWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L527">                .eq(ArticleEntity::getSlug, slug)</span>
+<span class="nc" id="L528">                .isNull(ArticleEntity::getDeletedAt);</span>
+<span class="nc bnc" id="L529" title="All 2 branches missed.">        if (excludeId != null) {</span>
+<span class="nc" id="L530">            wrapper.ne(ArticleEntity::getId, excludeId);</span>
+        }
+<span class="nc bnc" id="L532" title="All 2 branches missed.">        if (articleMapper.selectCount(wrapper) &gt; 0) {</span>
+<span class="nc" id="L533">            throw new ValidationException(&quot;slug 已存在&quot;);</span>
+        }
+<span class="nc" id="L535">    }</span>
+
+    private ArticleEntity findActive(Long id) {
+<span class="nc" id="L538">        ArticleEntity entity = articleMapper.selectOne(new LambdaQueryWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L539">                .eq(ArticleEntity::getId, id)</span>
+<span class="nc" id="L540">                .isNull(ArticleEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L541" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L542">            throw new NotFoundException(&quot;文章不存在&quot;);</span>
+        }
+<span class="nc" id="L544">        return entity;</span>
+    }
+
+    private void applyContentFields(ArticleEntity entity) {
+<span class="nc bnc" id="L548" title="All 2 branches missed.">        String md = entity.getContentMd() == null ? &quot;&quot; : entity.getContentMd();</span>
+<span class="nc" id="L549">        entity.setContentHtml(MarkdownUtils.toHtml(md));</span>
+<span class="nc" id="L550">        entity.setContentText(MarkdownUtils.toPlainText(md));</span>
+<span class="nc" id="L551">        entity.setWordCount(MarkdownUtils.countWords(entity.getContentText()));</span>
+<span class="nc" id="L552">        entity.setReadingMinutes(MarkdownUtils.estimateReadingMinutes(entity.getWordCount()));</span>
+<span class="nc bnc" id="L553" title="All 2 branches missed.">        if (entity.getViewCount() == null) {</span>
+<span class="nc" id="L554">            entity.setViewCount(0L);</span>
+        }
+<span class="nc bnc" id="L556" title="All 2 branches missed.">        if (entity.getLikeCount() == null) {</span>
+<span class="nc" id="L557">            entity.setLikeCount(0L);</span>
+        }
+<span class="nc bnc" id="L559" title="All 2 branches missed.">        if (entity.getCommentCount() == null) {</span>
+<span class="nc" id="L560">            entity.setCommentCount(0L);</span>
+        }
+<span class="nc" id="L562">    }</span>
+
+    private void saveTags(Long articleId, List&lt;Long&gt; tagIds) {
+<span class="nc" id="L565">        List&lt;Long&gt; normalizedTagIds = normalizeTagIds(tagIds);</span>
+<span class="nc bnc" id="L566" title="All 2 branches missed.">        if (normalizedTagIds.isEmpty()) {</span>
+<span class="nc" id="L567">            return;</span>
+        }
+<span class="nc bnc" id="L569" title="All 2 branches missed.">        for (Long tagId : normalizedTagIds) {</span>
+<span class="nc" id="L570">            ArticleTagEntity link = new ArticleTagEntity();</span>
+<span class="nc" id="L571">            link.setArticleId(articleId);</span>
+<span class="nc" id="L572">            link.setTagId(tagId);</span>
+<span class="nc" id="L573">            link.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L574">            articleTagMapper.insert(link);</span>
+<span class="nc" id="L575">        }</span>
+<span class="nc" id="L576">    }</span>
+
+    private List&lt;Long&gt; normalizeTagIds(List&lt;Long&gt; tagIds) {
+<span class="nc" id="L579">        Set&lt;Long&gt; unique = new LinkedHashSet&lt;Long&gt;();</span>
+<span class="nc bnc" id="L580" title="All 2 branches missed.">        if (tagIds == null) {</span>
+<span class="nc" id="L581">            return new ArrayList&lt;Long&gt;();</span>
+        }
+<span class="nc bnc" id="L583" title="All 2 branches missed.">        for (Long tagId : tagIds) {</span>
+<span class="nc bnc" id="L584" title="All 4 branches missed.">            if (tagId != null &amp;&amp; tagId &gt; 0) {</span>
+<span class="nc" id="L585">                unique.add(tagId);</span>
+            }
+<span class="nc" id="L587">        }</span>
+<span class="nc" id="L588">        return new ArrayList&lt;Long&gt;(unique);</span>
+    }
+
+    private List&lt;String&gt; loadTagNames(Long articleId) {
+<span class="nc" id="L592">        List&lt;ArticleTagEntity&gt; links = articleTagMapper.selectList(new LambdaQueryWrapper&lt;ArticleTagEntity&gt;()</span>
+<span class="nc" id="L593">                .eq(ArticleTagEntity::getArticleId, articleId));</span>
+<span class="nc bnc" id="L594" title="All 2 branches missed.">        if (links.isEmpty()) {</span>
+<span class="nc" id="L595">            return Collections.emptyList();</span>
+        }
+<span class="nc" id="L597">        List&lt;Long&gt; tagIds = links.stream().map(ArticleTagEntity::getTagId).collect(Collectors.toList());</span>
+<span class="nc" id="L598">        return tagMapper.selectBatchIds(tagIds).stream().map(TagEntity::getName).collect(Collectors.toList());</span>
+    }
+
+    private List&lt;Long&gt; loadTagIds(Long articleId) {
+<span class="nc" id="L602">        return articleTagMapper.selectList(new LambdaQueryWrapper&lt;ArticleTagEntity&gt;()</span>
+<span class="nc" id="L603">                        .eq(ArticleTagEntity::getArticleId, articleId))</span>
+<span class="nc" id="L604">                .stream().map(ArticleTagEntity::getTagId).collect(Collectors.toList());</span>
+    }
+
+    public List&lt;ArchiveGroupVO&gt; listArchives() {
+<span class="nc" id="L608">        List&lt;ArchiveArticleRow&gt; rows = articleMapper.listArchiveArticles();</span>
+<span class="nc" id="L609">        Map&lt;String, ArchiveGroupVO&gt; groups = new LinkedHashMap&lt;String, ArchiveGroupVO&gt;();</span>
+<span class="nc bnc" id="L610" title="All 2 branches missed.">        for (ArchiveArticleRow row : rows) {</span>
+<span class="nc bnc" id="L611" title="All 4 branches missed.">            if (row.getYear() == null || row.getMonth() == null) {</span>
+<span class="nc" id="L612">                continue;</span>
+            }
+<span class="nc" id="L614">            String key = row.getYear() + &quot;-&quot; + row.getMonth();</span>
+<span class="nc" id="L615">            ArchiveGroupVO group = groups.get(key);</span>
+<span class="nc bnc" id="L616" title="All 2 branches missed.">            if (group == null) {</span>
+<span class="nc" id="L617">                group = ArchiveGroupVO.builder()</span>
+<span class="nc" id="L618">                        .year(row.getYear())</span>
+<span class="nc" id="L619">                        .month(row.getMonth())</span>
+<span class="nc" id="L620">                        .articles(new ArrayList&lt;ArchiveGroupVO.ArchiveItemVO&gt;())</span>
+<span class="nc" id="L621">                        .build();</span>
+<span class="nc" id="L622">                groups.put(key, group);</span>
+            }
+<span class="nc" id="L624">            group.getArticles().add(ArchiveGroupVO.ArchiveItemVO.builder()</span>
+<span class="nc" id="L625">                    .id(row.getId())</span>
+<span class="nc" id="L626">                    .title(row.getTitle())</span>
+<span class="nc" id="L627">                    .slug(row.getSlug())</span>
+<span class="nc bnc" id="L628" title="All 2 branches missed.">                    .publishedAt(row.getPublishedAt() == null ? null : row.getPublishedAt().toString())</span>
+<span class="nc" id="L629">                    .build());</span>
+<span class="nc" id="L630">        }</span>
+<span class="nc" id="L631">        return new ArrayList&lt;ArchiveGroupVO&gt;(groups.values());</span>
+    }
+
+    private List&lt;ArticleListItemVO&gt; toListItems(List&lt;ArticleEntity&gt; entities) {
+<span class="nc bnc" id="L635" title="All 4 branches missed.">        if (entities == null || entities.isEmpty()) {</span>
+<span class="nc" id="L636">            return Collections.emptyList();</span>
+        }
+<span class="nc" id="L638">        Set&lt;Long&gt; categoryIds = entities.stream()</span>
+<span class="nc" id="L639">                .map(ArticleEntity::getCategoryId)</span>
+<span class="nc bnc" id="L640" title="All 4 branches missed.">                .filter(id -&gt; id != null &amp;&amp; id &gt; 0)</span>
+<span class="nc" id="L641">                .collect(Collectors.toSet());</span>
+<span class="nc bnc" id="L642" title="All 2 branches missed.">        Map&lt;Long, CategoryEntity&gt; categoryMap = categoryIds.isEmpty()</span>
+<span class="nc" id="L643">                ? Collections.&lt;Long, CategoryEntity&gt;emptyMap()</span>
+<span class="nc" id="L644">                : categoryMapper.selectBatchIds(new ArrayList&lt;Long&gt;(categoryIds)).stream()</span>
+<span class="nc" id="L645">                .collect(Collectors.toMap(CategoryEntity::getId, c -&gt; c, (a, b) -&gt; a));</span>
+
+<span class="nc" id="L647">        List&lt;Long&gt; articleIds = entities.stream().map(ArticleEntity::getId).collect(Collectors.toList());</span>
+<span class="nc" id="L648">        Map&lt;Long, List&lt;String&gt;&gt; tagNamesByArticle = loadTagNamesBatch(articleIds);</span>
+
+<span class="nc" id="L650">        return entities.stream()</span>
+<span class="nc" id="L651">                .map(entity -&gt; toListItem(entity, categoryMap, tagNamesByArticle))</span>
+<span class="nc" id="L652">                .collect(Collectors.toList());</span>
+    }
+
+    private ArticleListItemVO toListItem(ArticleEntity entity) {
+<span class="nc" id="L656">        Map&lt;Long, CategoryEntity&gt; categoryMap = Collections.emptyMap();</span>
+<span class="nc" id="L657">        Map&lt;Long, List&lt;String&gt;&gt; tagNamesByArticle = loadTagNamesBatch(</span>
+<span class="nc" id="L658">                Collections.singletonList(entity.getId()));</span>
+<span class="nc" id="L659">        return toListItem(entity, categoryMap, tagNamesByArticle);</span>
+    }
+
+    private ArticleListItemVO toListItem(ArticleEntity entity,
+                                         Map&lt;Long, CategoryEntity&gt; categoryMap,
+                                         Map&lt;Long, List&lt;String&gt;&gt; tagNamesByArticle) {
+<span class="nc" id="L665">        ArticleListItemVO.CategoryBriefVO categoryBrief = null;</span>
+<span class="nc bnc" id="L666" title="All 2 branches missed.">        if (entity.getCategoryId() != null) {</span>
+<span class="nc" id="L667">            CategoryEntity category = categoryMap.get(entity.getCategoryId());</span>
+<span class="nc bnc" id="L668" title="All 4 branches missed.">            if (category == null &amp;&amp; categoryMap.isEmpty()) {</span>
+<span class="nc" id="L669">                category = categoryMapper.selectById(entity.getCategoryId());</span>
+            }
+<span class="nc bnc" id="L671" title="All 2 branches missed.">            if (category != null) {</span>
+<span class="nc" id="L672">                categoryBrief = ArticleListItemVO.CategoryBriefVO.builder()</span>
+<span class="nc" id="L673">                        .name(category.getName())</span>
+<span class="nc" id="L674">                        .slug(category.getSlug())</span>
+<span class="nc" id="L675">                        .build();</span>
+            }
+        }
+<span class="nc" id="L678">        List&lt;String&gt; tags = tagNamesByArticle.get(entity.getId());</span>
+<span class="nc bnc" id="L679" title="All 2 branches missed.">        if (tags == null) {</span>
+<span class="nc" id="L680">            tags = Collections.emptyList();</span>
+        }
+<span class="nc" id="L682">        return ArticleListItemVO.builder()</span>
+<span class="nc" id="L683">                .id(entity.getId())</span>
+<span class="nc" id="L684">                .title(entity.getTitle())</span>
+<span class="nc" id="L685">                .slug(entity.getSlug())</span>
+<span class="nc" id="L686">                .summary(entity.getSummary())</span>
+<span class="nc" id="L687">                .status(entity.getStatus())</span>
+<span class="nc" id="L688">                .pinned(entity.getPinned())</span>
+<span class="nc" id="L689">                .readingMinutes(entity.getReadingMinutes())</span>
+<span class="nc" id="L690">                .wordCount(entity.getWordCount())</span>
+<span class="nc" id="L691">                .viewCount(entity.getViewCount())</span>
+<span class="nc" id="L692">                .publishedAt(entity.getPublishedAt())</span>
+<span class="nc" id="L693">                .category(categoryBrief)</span>
+<span class="nc" id="L694">                .tags(tags)</span>
+<span class="nc" id="L695">                .build();</span>
+    }
+
+    private Map&lt;Long, List&lt;String&gt;&gt; loadTagNamesBatch(List&lt;Long&gt; articleIds) {
+<span class="nc bnc" id="L699" title="All 4 branches missed.">        if (articleIds == null || articleIds.isEmpty()) {</span>
+<span class="nc" id="L700">            return Collections.emptyMap();</span>
+        }
+<span class="nc" id="L702">        List&lt;ArticleTagEntity&gt; links = articleTagMapper.selectList(new LambdaQueryWrapper&lt;ArticleTagEntity&gt;()</span>
+<span class="nc" id="L703">                .in(ArticleTagEntity::getArticleId, articleIds));</span>
+<span class="nc bnc" id="L704" title="All 2 branches missed.">        if (links.isEmpty()) {</span>
+<span class="nc" id="L705">            return Collections.emptyMap();</span>
+        }
+<span class="nc" id="L707">        Set&lt;Long&gt; tagIds = links.stream().map(ArticleTagEntity::getTagId).collect(Collectors.toSet());</span>
+<span class="nc" id="L708">        Map&lt;Long, TagEntity&gt; tagMap = tagMapper.selectBatchIds(new ArrayList&lt;Long&gt;(tagIds)).stream()</span>
+<span class="nc" id="L709">                .collect(Collectors.toMap(TagEntity::getId, t -&gt; t, (a, b) -&gt; a));</span>
+<span class="nc" id="L710">        Map&lt;Long, List&lt;String&gt;&gt; result = new HashMap&lt;Long, List&lt;String&gt;&gt;();</span>
+<span class="nc bnc" id="L711" title="All 2 branches missed.">        for (ArticleTagEntity link : links) {</span>
+<span class="nc" id="L712">            TagEntity tag = tagMap.get(link.getTagId());</span>
+<span class="nc bnc" id="L713" title="All 2 branches missed.">            if (tag != null) {</span>
+<span class="nc" id="L714">                result.computeIfAbsent(link.getArticleId(), k -&gt; new ArrayList&lt;String&gt;()).add(tag.getName());</span>
+            }
+<span class="nc" id="L716">        }</span>
+<span class="nc" id="L717">        return result;</span>
+    }
+
+    private ArticleDetailVO toDetail(ArticleEntity entity, boolean includeMd) {
+<span class="nc" id="L721">        Map&lt;String, String&gt; category = new HashMap&lt;String, String&gt;();</span>
+<span class="nc bnc" id="L722" title="All 2 branches missed.">        if (entity.getCategoryId() != null) {</span>
+<span class="nc" id="L723">            CategoryEntity cat = categoryMapper.selectById(entity.getCategoryId());</span>
+<span class="nc bnc" id="L724" title="All 2 branches missed.">            if (cat != null) {</span>
+<span class="nc" id="L725">                category.put(&quot;name&quot;, cat.getName());</span>
+<span class="nc" id="L726">                category.put(&quot;slug&quot;, cat.getSlug());</span>
+            }
+        }
+<span class="nc" id="L729">        Map&lt;String, String&gt; github = new HashMap&lt;String, String&gt;();</span>
+<span class="nc bnc" id="L730" title="All 2 branches missed.">        if (StringUtils.hasText(entity.getGithubRepo())) {</span>
+<span class="nc" id="L731">            github.put(&quot;repo&quot;, entity.getGithubRepo());</span>
+<span class="nc" id="L732">            github.put(&quot;commitSha&quot;, entity.getGithubCommitSha());</span>
+        }
+<span class="nc" id="L734">        ArticleDetailVO.ArticleDetailVOBuilder builder = ArticleDetailVO.builder()</span>
+<span class="nc" id="L735">                .id(entity.getId())</span>
+<span class="nc" id="L736">                .title(entity.getTitle())</span>
+<span class="nc" id="L737">                .slug(entity.getSlug())</span>
+<span class="nc" id="L738">                .summary(entity.getSummary())</span>
+<span class="nc" id="L739">                .contentHtml(entity.getContentHtml())</span>
+<span class="nc" id="L740">                .status(entity.getStatus())</span>
+<span class="nc" id="L741">                .pinned(entity.getPinned())</span>
+<span class="nc" id="L742">                .readingMinutes(entity.getReadingMinutes())</span>
+<span class="nc" id="L743">                .wordCount(entity.getWordCount())</span>
+<span class="nc" id="L744">                .viewCount(entity.getViewCount())</span>
+<span class="nc" id="L745">                .likeCount(articleLikeService.getLikeCount(entity))</span>
+<span class="nc" id="L746">                .commentCount(entity.getCommentCount())</span>
+<span class="nc" id="L747">                .publishedAt(entity.getPublishedAt())</span>
+<span class="nc" id="L748">                .tags(loadTagNames(entity.getId()))</span>
+<span class="nc" id="L749">                .category(category)</span>
+<span class="nc bnc" id="L750" title="All 2 branches missed.">                .github(github.isEmpty() ? null : github);</span>
+<span class="nc bnc" id="L751" title="All 2 branches missed.">        if (includeMd) {</span>
+<span class="nc" id="L752">            builder.contentMd(entity.getContentMd());</span>
+<span class="nc" id="L753">            builder.categoryId(entity.getCategoryId());</span>
+<span class="nc" id="L754">            builder.tagIds(loadTagIds(entity.getId()));</span>
+        }
+<span class="nc" id="L756">        return builder.build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

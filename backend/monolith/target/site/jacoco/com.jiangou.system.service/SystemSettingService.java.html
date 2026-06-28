@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SystemSettingService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.system.service</a> &gt; <span class="el_source">SystemSettingService.java</span></div><h1>SystemSettingService.java</h1><pre class="source lang-java linenums">package com.jiangou.system.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jiangou.common.exception.NotFoundException;
+import com.jiangou.common.exception.ValidationException;
+import com.jiangou.common.result.PageResult;
+import com.jiangou.system.entity.AuditLogEntity;
+import com.jiangou.system.entity.SystemSettingEntity;
+import com.jiangou.system.mapper.AuditLogMapper;
+import com.jiangou.system.mapper.SystemSettingMapper;
+import com.jiangou.common.cache.RedisCacheHelper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Service
+public class SystemSettingService {
+
+    private static final String PUBLIC_SETTINGS_CACHE_KEY = &quot;cache:settings:public&quot;;
+    private static final long CACHE_TTL_SEC = 600;
+<span class="fc" id="L33">    private static final Set&lt;String&gt; ALLOWED_KEYS = Collections.unmodifiableSet(new HashSet&lt;String&gt;(Arrays.asList(</span>
+            &quot;siteTitle&quot;,
+            &quot;siteDescription&quot;,
+            &quot;siteSubtitle&quot;,
+            &quot;siteLaunchDate&quot;,
+            &quot;guestbookTargetId&quot;,
+            &quot;webmentionEnabled&quot;,
+            &quot;defaultTheme&quot;
+    )));
+<span class="fc" id="L42">    private static final Set&lt;String&gt; PUBLIC_KEYS = Collections.unmodifiableSet(new HashSet&lt;String&gt;(Arrays.asList(</span>
+            &quot;siteTitle&quot;,
+            &quot;siteDescription&quot;,
+            &quot;siteSubtitle&quot;,
+            &quot;siteLaunchDate&quot;,
+            &quot;guestbookTargetId&quot;,
+            &quot;defaultTheme&quot;
+    )));
+
+    private final SystemSettingMapper settingMapper;
+    private final RedisCacheHelper cacheHelper;
+    private final ObjectMapper objectMapper;
+
+    public SystemSettingService(SystemSettingMapper settingMapper,
+                                RedisCacheHelper cacheHelper,
+<span class="fc" id="L57">                                ObjectMapper objectMapper) {</span>
+<span class="fc" id="L58">        this.settingMapper = settingMapper;</span>
+<span class="fc" id="L59">        this.cacheHelper = cacheHelper;</span>
+<span class="fc" id="L60">        this.objectMapper = objectMapper;</span>
+<span class="fc" id="L61">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    public Map&lt;String, Object&gt; getPublicSettings() {
+<span class="nc" id="L65">        String cached = cacheHelper.get(PUBLIC_SETTINGS_CACHE_KEY);</span>
+<span class="nc bnc" id="L66" title="All 2 branches missed.">        if (cached != null) {</span>
+            try {
+<span class="nc" id="L68">                return objectMapper.readValue(cached, Map.class);</span>
+<span class="nc" id="L69">            } catch (JsonProcessingException ignored) {</span>
+<span class="nc" id="L70">                cacheHelper.delete(PUBLIC_SETTINGS_CACHE_KEY);</span>
+            }
+        }
+<span class="nc" id="L73">        List&lt;SystemSettingEntity&gt; list = settingMapper.selectList(new LambdaQueryWrapper&lt;SystemSettingEntity&gt;()</span>
+<span class="nc" id="L74">                .eq(SystemSettingEntity::getIsPublic, true));</span>
+<span class="nc" id="L75">        Map&lt;String, Object&gt; map = new HashMap&lt;String, Object&gt;();</span>
+<span class="nc bnc" id="L76" title="All 2 branches missed.">        for (SystemSettingEntity s : list) {</span>
+<span class="nc" id="L77">            map.put(s.getKey(), s.getValue());</span>
+<span class="nc" id="L78">        }</span>
+<span class="nc bnc" id="L79" title="All 2 branches missed.">        if (map.isEmpty()) {</span>
+<span class="nc" id="L80">            map.put(&quot;siteTitle&quot;, &quot;渐构&quot;);</span>
+<span class="nc" id="L81">            map.put(&quot;siteDescription&quot;, &quot;渐次构建，理解计算机世界&quot;);</span>
+<span class="nc" id="L82">            map.put(&quot;defaultTheme&quot;, &quot;system&quot;);</span>
+        }
+        try {
+<span class="nc" id="L85">            cacheHelper.set(PUBLIC_SETTINGS_CACHE_KEY, objectMapper.writeValueAsString(map), CACHE_TTL_SEC);</span>
+<span class="nc" id="L86">        } catch (JsonProcessingException ignored) {</span>
+            // skip cache write
+<span class="nc" id="L88">        }</span>
+<span class="nc" id="L89">        return map;</span>
+    }
+
+    public List&lt;SystemSettingEntity&gt; listAll() {
+<span class="nc" id="L93">        return settingMapper.selectList(null);</span>
+    }
+
+    public String getValue(String key) {
+<span class="nc" id="L97">        SystemSettingEntity entity = settingMapper.selectById(key);</span>
+<span class="nc bnc" id="L98" title="All 2 branches missed.">        return entity != null ? entity.getValue() : null;</span>
+    }
+
+    @Transactional
+    public SystemSettingEntity update(String key, String value, Long updatedBy) {
+<span class="fc bfc" id="L103" title="All 2 branches covered.">        if (!ALLOWED_KEYS.contains(key)) {</span>
+<span class="fc" id="L104">            throw new ValidationException(&quot;不支持的设置项: &quot; + key);</span>
+        }
+<span class="fc" id="L106">        SystemSettingEntity entity = settingMapper.selectById(key);</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">        if (entity == null) {</span>
+<span class="fc" id="L108">            entity = new SystemSettingEntity();</span>
+<span class="fc" id="L109">            entity.setKey(key);</span>
+<span class="fc" id="L110">            entity.setDescription(&quot;&quot;);</span>
+<span class="fc" id="L111">            entity.setIsPublic(PUBLIC_KEYS.contains(key));</span>
+<span class="fc" id="L112">            entity.setValue(value);</span>
+<span class="fc" id="L113">            entity.setUpdatedBy(updatedBy);</span>
+<span class="fc" id="L114">            entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="fc" id="L115">            settingMapper.insert(entity);</span>
+        } else {
+<span class="fc" id="L117">            entity.setValue(value);</span>
+<span class="fc" id="L118">            entity.setUpdatedBy(updatedBy);</span>
+<span class="fc" id="L119">            entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="fc" id="L120">            settingMapper.updateById(entity);</span>
+        }
+<span class="fc" id="L122">        cacheHelper.delete(PUBLIC_SETTINGS_CACHE_KEY);</span>
+<span class="fc" id="L123">        return entity;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

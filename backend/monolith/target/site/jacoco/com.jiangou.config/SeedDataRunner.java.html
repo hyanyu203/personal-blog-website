@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SeedDataRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.config</a> &gt; <span class="el_source">SeedDataRunner.java</span></div><h1>SeedDataRunner.java</h1><pre class="source lang-java linenums">package com.jiangou.config;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.jiangou.article.dto.CreateArticleDTO;
+import com.jiangou.article.service.ArticleService;
+import com.jiangou.category.entity.CategoryEntity;
+import com.jiangou.category.mapper.CategoryMapper;
+import com.jiangou.friendlink.entity.FriendLinkEntity;
+import com.jiangou.friendlink.mapper.FriendLinkMapper;
+import com.jiangou.search.service.SearchIndexService;
+import com.jiangou.system.entity.SystemSettingEntity;
+import com.jiangou.system.mapper.SystemSettingMapper;
+import com.jiangou.note.dto.NoteDTO;
+import com.jiangou.note.service.NoteService;
+import com.jiangou.project.dto.ProjectDTO;
+import com.jiangou.project.service.ProjectService;
+import com.jiangou.snippet.dto.SnippetDTO;
+import com.jiangou.snippet.service.SnippetService;
+import com.jiangou.tag.entity.TagEntity;
+import com.jiangou.tag.mapper.TagMapper;
+import com.jiangou.user.entity.UserEntity;
+import com.jiangou.user.mapper.UserMapper;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.time.LocalDateTime;
+import java.util.Arrays;
+
+@Configuration
+@Profile(&quot;dev&quot;)
+<span class="nc" id="L34">public class SeedDataRunner {</span>
+
+    @Bean
+    CommandLineRunner seed(UserMapper userMapper, PasswordEncoder passwordEncoder,
+                           CategoryMapper categoryMapper, TagMapper tagMapper,
+                           ArticleService articleService, SnippetService snippetService,
+                           NoteService noteService, ProjectService projectService,
+                           FriendLinkMapper friendLinkMapper,
+                           SystemSettingMapper systemSettingMapper,
+                           SearchIndexService searchIndexService,
+                           com.jiangou.user.service.RoleService roleService) {
+<span class="nc" id="L45">        return args -&gt; {</span>
+<span class="nc" id="L46">            UserEntity admin = userMapper.selectOne(new LambdaQueryWrapper&lt;UserEntity&gt;()</span>
+<span class="nc" id="L47">                    .eq(UserEntity::getUsername, &quot;admin&quot;));</span>
+<span class="nc bnc" id="L48" title="All 2 branches missed.">            if (admin == null) {</span>
+<span class="nc" id="L49">                admin = new UserEntity();</span>
+<span class="nc" id="L50">                admin.setUsername(&quot;admin&quot;);</span>
+<span class="nc" id="L51">                admin.setDisplayName(&quot;管理员&quot;);</span>
+<span class="nc" id="L52">                admin.setEmail(&quot;admin@jiangou.local&quot;);</span>
+<span class="nc" id="L53">                admin.setEmailVerified(true);</span>
+<span class="nc" id="L54">                admin.setPasswordHash(passwordEncoder.encode(&quot;admin123&quot;));</span>
+<span class="nc" id="L55">                admin.setStatus(&quot;active&quot;);</span>
+<span class="nc" id="L56">                admin.setTokenVersion(0);</span>
+<span class="nc" id="L57">                admin.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L58">                admin.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L59">                admin.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L60">                userMapper.insert(admin);</span>
+            }
+<span class="nc" id="L62">            roleService.ensureRole(&quot;ADMIN&quot;, &quot;管理员&quot;);</span>
+<span class="nc" id="L63">            roleService.assignRole(admin.getId(), &quot;ADMIN&quot;);</span>
+
+<span class="nc" id="L65">            CategoryEntity category = categoryMapper.selectOne(new LambdaQueryWrapper&lt;CategoryEntity&gt;()</span>
+<span class="nc" id="L66">                    .eq(CategoryEntity::getSlug, &quot;engineering&quot;));</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">            if (category == null) {</span>
+<span class="nc" id="L68">                category = new CategoryEntity();</span>
+<span class="nc" id="L69">                category.setName(&quot;工程实践&quot;);</span>
+<span class="nc" id="L70">                category.setSlug(&quot;engineering&quot;);</span>
+<span class="nc" id="L71">                category.setDescription(&quot;工程与架构&quot;);</span>
+<span class="nc" id="L72">                category.setSortOrder(0);</span>
+<span class="nc" id="L73">                category.setPostCount(0);</span>
+<span class="nc" id="L74">                category.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L75">                category.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L76">                category.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L77">                categoryMapper.insert(category);</span>
+            }
+
+<span class="nc" id="L80">            TagEntity tag = tagMapper.selectOne(new LambdaQueryWrapper&lt;TagEntity&gt;()</span>
+<span class="nc" id="L81">                    .eq(TagEntity::getSlug, &quot;java&quot;));</span>
+<span class="nc bnc" id="L82" title="All 2 branches missed.">            if (tag == null) {</span>
+<span class="nc" id="L83">                tag = new TagEntity();</span>
+<span class="nc" id="L84">                tag.setName(&quot;Java&quot;);</span>
+<span class="nc" id="L85">                tag.setSlug(&quot;java&quot;);</span>
+<span class="nc" id="L86">                tag.setColor(&quot;#7b5f3a&quot;);</span>
+<span class="nc" id="L87">                tag.setUsageCount(0);</span>
+<span class="nc" id="L88">                tag.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L89">                tag.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L90">                tag.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L91">                tagMapper.insert(tag);</span>
+            }
+
+<span class="nc bnc" id="L94" title="All 2 branches missed.">            if (articleService.listPublic(1, 1, null, null, null).getTotal() == 0) {</span>
+<span class="nc" id="L95">                CreateArticleDTO dto = new CreateArticleDTO();</span>
+<span class="nc" id="L96">                dto.setTitle(&quot;欢迎来到渐构&quot;);</span>
+<span class="nc" id="L97">                dto.setSlug(&quot;welcome-to-jiangou&quot;);</span>
+<span class="nc" id="L98">                dto.setSummary(&quot;渐次构建，理解计算机世界。&quot;);</span>
+<span class="nc" id="L99">                dto.setContentMd(&quot;# 欢迎来到渐构\n\n这是第一篇示例文章。\n\n## 快速开始\n\n阅读更多内容。\n\n```java\npublic class Hello {\n  public static void main(String[] args) {\n    System.out.println(\&quot;Hello JianGou\&quot;);\n  }\n}\n```&quot;);</span>
+<span class="nc" id="L100">                dto.setCategoryId(category.getId());</span>
+<span class="nc" id="L101">                dto.setTagIds(Arrays.asList(tag.getId()));</span>
+<span class="nc" id="L102">                com.jiangou.article.vo.ArticleDetailVO created = articleService.create(dto, admin.getId());</span>
+<span class="nc" id="L103">                articleService.publish(created.getId(), admin.getId());</span>
+            }
+
+<span class="nc bnc" id="L106" title="All 2 branches missed.">            if (snippetService.listPublic(1, 1, null).getTotal() == 0) {</span>
+<span class="nc" id="L107">                SnippetDTO snippet = new SnippetDTO();</span>
+<span class="nc" id="L108">                snippet.setTitle(&quot;Hello Java&quot;);</span>
+<span class="nc" id="L109">                snippet.setSlug(&quot;hello-java&quot;);</span>
+<span class="nc" id="L110">                snippet.setLanguage(&quot;java&quot;);</span>
+<span class="nc" id="L111">                snippet.setCode(&quot;System.out.println(\&quot;Hello JianGou\&quot;);&quot;);</span>
+<span class="nc" id="L112">                snippet.setDescriptionMd(&quot;一行 Java 示例&quot;);</span>
+<span class="nc" id="L113">                snippetService.create(snippet, admin.getId());</span>
+            }
+
+<span class="nc bnc" id="L116" title="All 2 branches missed.">            if (noteService.listPublic(1, 1).getTotal() == 0) {</span>
+<span class="nc" id="L117">                NoteDTO note = new NoteDTO();</span>
+<span class="nc" id="L118">                note.setContentMd(&quot;开始搭建渐构博客，渐次构建。&quot;);</span>
+<span class="nc" id="L119">                com.jiangou.note.vo.NoteVO createdNote = noteService.create(note, admin.getId());</span>
+<span class="nc" id="L120">                noteService.publish(createdNote.getId());</span>
+            }
+
+<span class="nc bnc" id="L123" title="All 2 branches missed.">            if (projectService.listPublic().isEmpty()) {</span>
+<span class="nc" id="L124">                ProjectDTO project = new ProjectDTO();</span>
+<span class="nc" id="L125">                project.setOwner(&quot;jiangou&quot;);</span>
+<span class="nc" id="L126">                project.setRepo(&quot;blog&quot;);</span>
+<span class="nc" id="L127">                project.setName(&quot;JianGou Blog&quot;);</span>
+<span class="nc" id="L128">                project.setDescription(&quot;渐构个人技术博客平台&quot;);</span>
+<span class="nc" id="L129">                project.setPinned(true);</span>
+<span class="nc" id="L130">                projectService.create(project);</span>
+            }
+
+<span class="nc bnc" id="L133" title="All 2 branches missed.">            if (friendLinkMapper.selectCount(new LambdaQueryWrapper&lt;FriendLinkEntity&gt;()) == 0) {</span>
+<span class="nc" id="L134">                FriendLinkEntity link = new FriendLinkEntity();</span>
+<span class="nc" id="L135">                link.setName(&quot;示例友链&quot;);</span>
+<span class="nc" id="L136">                link.setUrl(&quot;https://example.com&quot;);</span>
+<span class="nc" id="L137">                link.setDescription(&quot;示例站点&quot;);</span>
+<span class="nc" id="L138">                link.setStatus(&quot;approved&quot;);</span>
+<span class="nc" id="L139">                link.setSortOrder(0);</span>
+<span class="nc" id="L140">                link.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L141">                link.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L142">                link.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L143">                friendLinkMapper.insert(link);</span>
+            }
+
+<span class="nc bnc" id="L146" title="All 2 branches missed.">            if (systemSettingMapper.selectById(&quot;siteTitle&quot;) == null) {</span>
+<span class="nc" id="L147">                SystemSettingEntity title = new SystemSettingEntity();</span>
+<span class="nc" id="L148">                title.setKey(&quot;siteTitle&quot;);</span>
+<span class="nc" id="L149">                title.setValue(&quot;渐构&quot;);</span>
+<span class="nc" id="L150">                title.setDescription(&quot;站点标题&quot;);</span>
+<span class="nc" id="L151">                title.setIsPublic(true);</span>
+<span class="nc" id="L152">                title.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L153">                systemSettingMapper.insert(title);</span>
+            }
+
+<span class="nc bnc" id="L156" title="All 2 branches missed.">            if (systemSettingMapper.selectById(&quot;siteLaunchDate&quot;) == null) {</span>
+<span class="nc" id="L157">                SystemSettingEntity launch = new SystemSettingEntity();</span>
+<span class="nc" id="L158">                launch.setKey(&quot;siteLaunchDate&quot;);</span>
+<span class="nc" id="L159">                launch.setValue(LocalDateTime.now().toLocalDate().toString());</span>
+<span class="nc" id="L160">                launch.setDescription(&quot;站点上线日期&quot;);</span>
+<span class="nc" id="L161">                launch.setIsPublic(true);</span>
+<span class="nc" id="L162">                launch.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L163">                systemSettingMapper.insert(launch);</span>
+            }
+
+<span class="nc bnc" id="L166" title="All 2 branches missed.">            if (systemSettingMapper.selectById(&quot;siteDescription&quot;) == null) {</span>
+<span class="nc" id="L167">                SystemSettingEntity desc = new SystemSettingEntity();</span>
+<span class="nc" id="L168">                desc.setKey(&quot;siteDescription&quot;);</span>
+<span class="nc" id="L169">                desc.setValue(&quot;渐构是个人技术知识沉淀平台，融合 Blog、Wiki、代码片段与项目陈列。&quot;);</span>
+<span class="nc" id="L170">                desc.setDescription(&quot;站点简介&quot;);</span>
+<span class="nc" id="L171">                desc.setIsPublic(true);</span>
+<span class="nc" id="L172">                desc.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L173">                systemSettingMapper.insert(desc);</span>
+            }
+
+<span class="nc bnc" id="L176" title="All 2 branches missed.">            if (systemSettingMapper.selectById(&quot;siteSubtitle&quot;) == null) {</span>
+<span class="nc" id="L177">                SystemSettingEntity subtitle = new SystemSettingEntity();</span>
+<span class="nc" id="L178">                subtitle.setKey(&quot;siteSubtitle&quot;);</span>
+<span class="nc" id="L179">                subtitle.setValue(&quot;渐次构建，理解计算机世界&quot;);</span>
+<span class="nc" id="L180">                subtitle.setDescription(&quot;站点副标题&quot;);</span>
+<span class="nc" id="L181">                subtitle.setIsPublic(true);</span>
+<span class="nc" id="L182">                subtitle.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L183">                systemSettingMapper.insert(subtitle);</span>
+            }
+
+<span class="nc bnc" id="L186" title="All 2 branches missed.">            if (systemSettingMapper.selectById(&quot;guestbookTargetId&quot;) == null) {</span>
+<span class="nc" id="L187">                SystemSettingEntity guestbook = new SystemSettingEntity();</span>
+<span class="nc" id="L188">                guestbook.setKey(&quot;guestbookTargetId&quot;);</span>
+<span class="nc" id="L189">                guestbook.setValue(&quot;1&quot;);</span>
+<span class="nc" id="L190">                guestbook.setDescription(&quot;留言板评论 targetId&quot;);</span>
+<span class="nc" id="L191">                guestbook.setIsPublic(true);</span>
+<span class="nc" id="L192">                guestbook.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L193">                systemSettingMapper.insert(guestbook);</span>
+            }
+
+<span class="nc" id="L196">            searchIndexService.rebuildAll();</span>
+<span class="nc" id="L197">        };</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

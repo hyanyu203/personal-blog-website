@@ -1,0 +1,12 @@
+﻿server:
+  port: 8005
+
+spring:
+  application:
+    name: search-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

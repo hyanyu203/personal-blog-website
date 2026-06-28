@@ -1,0 +1,1 @@
+import{a as t}from"./entry.4d6996de.js";function o(e=1,p){let n=`/snippets?page=${e}&pageSize=20`;return p&&(n+=`&language=${encodeURIComponent(p)}`),t(n)}function s(e){return t(`/snippets/${e}`)}function r(e){return t(`/snippets/${e}/copy`,{method:"POST"})}function c(e){return t(`/snippets/${e}/like`,{method:"POST",body:"{}"})}export{o as a,r as c,s as f,c as l};

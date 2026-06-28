@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BootstrapAdminRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.config</a> &gt; <span class="el_source">BootstrapAdminRunner.java</span></div><h1>BootstrapAdminRunner.java</h1><pre class="source lang-java linenums">package com.jiangou.config;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.jiangou.user.entity.UserEntity;
+import com.jiangou.user.mapper.UserMapper;
+import com.jiangou.user.service.RoleService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
+import java.util.regex.Pattern;
+
+@Component
+public class BootstrapAdminRunner implements ApplicationRunner {
+
+<span class="fc" id="L23">    private static final Logger log = LoggerFactory.getLogger(BootstrapAdminRunner.class);</span>
+<span class="fc" id="L24">    private static final Pattern PASSWORD_PATTERN = Pattern.compile(&quot;^(?=.*[A-Za-z])(?=.*\\d).{8,}$&quot;);</span>
+
+    private final UserMapper userMapper;
+    private final RoleService roleService;
+    private final PasswordEncoder passwordEncoder;
+    private final JdbcTemplate jdbcTemplate;
+
+    @Value(&quot;${BOOTSTRAP_ADMIN_USERNAME:}&quot;)
+    private String username;
+
+    @Value(&quot;${BOOTSTRAP_ADMIN_EMAIL:}&quot;)
+    private String email;
+
+    @Value(&quot;${BOOTSTRAP_ADMIN_PASSWORD:}&quot;)
+    private String password;
+
+    @Value(&quot;${BOOTSTRAP_ADMIN_DISPLAY_NAME:}&quot;)
+    private String displayName;
+
+    public BootstrapAdminRunner(UserMapper userMapper, RoleService roleService,
+<span class="fc" id="L44">                                PasswordEncoder passwordEncoder, JdbcTemplate jdbcTemplate) {</span>
+<span class="fc" id="L45">        this.userMapper = userMapper;</span>
+<span class="fc" id="L46">        this.roleService = roleService;</span>
+<span class="fc" id="L47">        this.passwordEncoder = passwordEncoder;</span>
+<span class="fc" id="L48">        this.jdbcTemplate = jdbcTemplate;</span>
+<span class="fc" id="L49">    }</span>
+
+    @Override
+    public void run(ApplicationArguments args) {
+<span class="fc bfc" id="L53" title="All 2 branches covered.">        if (!hasAnyBootstrapValue()) {</span>
+<span class="fc" id="L54">            return;</span>
+        }
+<span class="fc" id="L56">        validateBootstrapConfig();</span>
+<span class="fc bfc" id="L57" title="All 2 branches covered.">        if (hasExistingAdmin()) {</span>
+<span class="fc" id="L58">            log.info(&quot;Detected existing ADMIN user, skipping bootstrap admin creation.&quot;);</span>
+<span class="fc" id="L59">            return;</span>
+        }
+<span class="fc" id="L61">        ensureUserNotTaken();</span>
+
+<span class="fc" id="L63">        UserEntity admin = new UserEntity();</span>
+<span class="fc" id="L64">        admin.setUsername(username.trim());</span>
+<span class="fc" id="L65">        admin.setDisplayName(resolveDisplayName());</span>
+<span class="fc" id="L66">        admin.setEmail(email.trim().toLowerCase());</span>
+<span class="fc" id="L67">        admin.setEmailVerified(true);</span>
+<span class="fc" id="L68">        admin.setPasswordHash(passwordEncoder.encode(password));</span>
+<span class="fc" id="L69">        admin.setStatus(&quot;active&quot;);</span>
+<span class="fc" id="L70">        admin.setTokenVersion(0);</span>
+<span class="fc" id="L71">        admin.setMetadata(&quot;{}&quot;);</span>
+<span class="fc" id="L72">        admin.setCreatedAt(LocalDateTime.now());</span>
+<span class="fc" id="L73">        admin.setUpdatedAt(LocalDateTime.now());</span>
+<span class="fc" id="L74">        userMapper.insert(admin);</span>
+<span class="pc bpc" id="L75" title="1 of 2 branches missed.">        if (admin.getId() == null) {</span>
+<span class="nc" id="L76">            throw new IllegalStateException(&quot;首个 ADMIN 创建失败：未获取到用户 ID&quot;);</span>
+        }
+
+<span class="fc" id="L79">        roleService.ensureRole(&quot;ADMIN&quot;, &quot;管理员&quot;);</span>
+<span class="fc" id="L80">        roleService.assignRole(admin.getId(), &quot;ADMIN&quot;);</span>
+<span class="fc" id="L81">        log.warn(&quot;Bootstrap ADMIN user [{}] created. Remove BOOTSTRAP_ADMIN_* from env after first successful startup.&quot;, admin.getUsername());</span>
+<span class="fc" id="L82">    }</span>
+
+    private boolean hasAnyBootstrapValue() {
+<span class="fc bfc" id="L85" title="All 2 branches covered.">        return StringUtils.hasText(username)</span>
+<span class="pc bpc" id="L86" title="1 of 2 branches missed.">                || StringUtils.hasText(email)</span>
+<span class="pc bpc" id="L87" title="1 of 2 branches missed.">                || StringUtils.hasText(password)</span>
+<span class="pc bpc" id="L88" title="1 of 2 branches missed.">                || StringUtils.hasText(displayName);</span>
+    }
+
+    private void validateBootstrapConfig() {
+<span class="pc bpc" id="L92" title="2 of 6 branches missed.">        if (!StringUtils.hasText(username) || !StringUtils.hasText(email) || !StringUtils.hasText(password)) {</span>
+<span class="fc" id="L93">            throw new IllegalStateException(&quot;BOOTSTRAP_ADMIN_USERNAME / EMAIL / PASSWORD 必须同时配置&quot;);</span>
+        }
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">        if (!email.contains(&quot;@&quot;)) {</span>
+<span class="nc" id="L96">            throw new IllegalStateException(&quot;BOOTSTRAP_ADMIN_EMAIL 格式不正确&quot;);</span>
+        }
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">        if (!PASSWORD_PATTERN.matcher(password).matches()) {</span>
+<span class="nc" id="L99">            throw new IllegalStateException(&quot;BOOTSTRAP_ADMIN_PASSWORD 至少 8 位且包含字母和数字&quot;);</span>
+        }
+<span class="fc" id="L101">    }</span>
+
+    private boolean hasExistingAdmin() {
+<span class="fc" id="L104">        Integer count = jdbcTemplate.queryForObject(</span>
+                &quot;SELECT COUNT(*) FROM user_roles ur &quot;
+                        + &quot;INNER JOIN roles r ON r.id = ur.role_id &quot;
+                        + &quot;INNER JOIN users u ON u.id = ur.user_id &quot;
+                        + &quot;WHERE r.code = 'ADMIN' AND r.deleted_at IS NULL AND u.deleted_at IS NULL&quot;,
+                Integer.class);
+<span class="pc bpc" id="L110" title="1 of 4 branches missed.">        return count != null &amp;&amp; count &gt; 0;</span>
+    }
+
+    private void ensureUserNotTaken() {
+<span class="fc" id="L114">        UserEntity existing = userMapper.selectOne(new LambdaQueryWrapper&lt;UserEntity&gt;()</span>
+<span class="fc" id="L115">                .and(wrapper -&gt; wrapper</span>
+<span class="fc" id="L116">                        .eq(UserEntity::getUsername, username.trim())</span>
+<span class="fc" id="L117">                        .or()</span>
+<span class="fc" id="L118">                        .eq(UserEntity::getEmail, email.trim().toLowerCase()))</span>
+<span class="fc" id="L119">                .isNull(UserEntity::getDeletedAt));</span>
+<span class="pc bpc" id="L120" title="1 of 2 branches missed.">        if (existing != null) {</span>
+<span class="nc" id="L121">            throw new IllegalStateException(&quot;BOOTSTRAP_ADMIN 用户名或邮箱已存在，请改用新的凭据或手动处理该账号&quot;);</span>
+        }
+<span class="fc" id="L123">    }</span>
+
+    private String resolveDisplayName() {
+<span class="pc bpc" id="L126" title="1 of 2 branches missed.">        return StringUtils.hasText(displayName) ? displayName.trim() : username.trim();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

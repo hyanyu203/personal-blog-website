@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GitHubSyncService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.project.service</a> &gt; <span class="el_source">GitHubSyncService.java</span></div><h1>GitHubSyncService.java</h1><pre class="source lang-java linenums">package com.jiangou.project.service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jiangou.project.entity.ProjectEntity;
+import com.jiangou.project.entity.GithubSyncLogEntity;
+import com.jiangou.project.mapper.GithubSyncLogMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestTemplate;
+
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+
+@Service
+public class GitHubSyncService {
+
+<span class="nc" id="L26">    private static final Logger log = LoggerFactory.getLogger(GitHubSyncService.class);</span>
+
+<span class="nc" id="L28">    private final RestTemplate restTemplate = new RestTemplate();</span>
+<span class="nc" id="L29">    private final ObjectMapper objectMapper = new ObjectMapper();</span>
+    private final GithubSyncLogMapper syncLogMapper;
+
+    @Value(&quot;${jiangou.github.token:}&quot;)
+    private String githubToken;
+
+<span class="nc" id="L35">    public GitHubSyncService(GithubSyncLogMapper syncLogMapper) {</span>
+<span class="nc" id="L36">        this.syncLogMapper = syncLogMapper;</span>
+<span class="nc" id="L37">    }</span>
+
+    public boolean syncProject(ProjectEntity entity) {
+<span class="nc" id="L40">        String url = &quot;https://api.github.com/repos/&quot; + entity.getOwner() + &quot;/&quot; + entity.getRepo();</span>
+<span class="nc" id="L41">        HttpHeaders headers = new HttpHeaders();</span>
+<span class="nc" id="L42">        headers.set(&quot;Accept&quot;, &quot;application/vnd.github+json&quot;);</span>
+<span class="nc" id="L43">        headers.set(&quot;User-Agent&quot;, &quot;JianGou-Blog&quot;);</span>
+<span class="nc bnc" id="L44" title="All 4 branches missed.">        if (githubToken != null &amp;&amp; !githubToken.isEmpty()) {</span>
+<span class="nc" id="L45">            headers.set(&quot;Authorization&quot;, &quot;Bearer &quot; + githubToken);</span>
+        }
+
+<span class="nc" id="L48">        GithubSyncLogEntity logEntity = new GithubSyncLogEntity();</span>
+<span class="nc" id="L49">        logEntity.setProjectId(entity.getId());</span>
+<span class="nc" id="L50">        logEntity.setRequestCount(1);</span>
+<span class="nc" id="L51">        logEntity.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L52">        logEntity.setCreatedAt(LocalDateTime.now());</span>
+
+        try {
+<span class="nc" id="L55">            ResponseEntity&lt;String&gt; response = restTemplate.exchange(</span>
+                    url, HttpMethod.GET, new HttpEntity&lt;Void&gt;(headers), String.class);
+<span class="nc" id="L57">            JsonNode node = objectMapper.readTree(response.getBody());</span>
+
+<span class="nc" id="L59">            entity.setName(node.path(&quot;name&quot;).asText(entity.getRepo()));</span>
+<span class="nc bnc" id="L60" title="All 2 branches missed.">            entity.setDescription(node.path(&quot;description&quot;).isNull() ? null : node.path(&quot;description&quot;).asText());</span>
+<span class="nc bnc" id="L61" title="All 2 branches missed.">            entity.setHomepageUrl(node.path(&quot;homepage&quot;).isNull() ? null : node.path(&quot;homepage&quot;).asText());</span>
+<span class="nc" id="L62">            entity.setGithubUrl(node.path(&quot;html_url&quot;).asText(entity.getGithubUrl()));</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">            entity.setLanguage(node.path(&quot;language&quot;).isNull() ? null : node.path(&quot;language&quot;).asText());</span>
+<span class="nc" id="L64">            entity.setStars(node.path(&quot;stargazers_count&quot;).asInt(0));</span>
+<span class="nc" id="L65">            entity.setForks(node.path(&quot;forks_count&quot;).asInt(0));</span>
+<span class="nc" id="L66">            entity.setOpenIssues(node.path(&quot;open_issues_count&quot;).asInt(0));</span>
+<span class="nc" id="L67">            JsonNode licenseNode = node.path(&quot;license&quot;);</span>
+<span class="nc bnc" id="L68" title="All 4 branches missed.">            if (!licenseNode.isMissingNode() &amp;&amp; !licenseNode.isNull()) {</span>
+<span class="nc" id="L69">                entity.setLicense(licenseNode.path(&quot;spdx_id&quot;).asText(null));</span>
+            }
+<span class="nc bnc" id="L71" title="All 2 branches missed.">            if (!node.path(&quot;pushed_at&quot;).isNull()) {</span>
+<span class="nc" id="L72">                Instant instant = Instant.parse(node.path(&quot;pushed_at&quot;).asText());</span>
+<span class="nc" id="L73">                entity.setPushedAt(LocalDateTime.ofInstant(instant, ZoneOffset.UTC));</span>
+            }
+<span class="nc" id="L75">            entity.setSyncedAt(LocalDateTime.now());</span>
+<span class="nc" id="L76">            entity.setSyncStatus(&quot;ok&quot;);</span>
+
+<span class="nc" id="L78">            logEntity.setStatus(&quot;success&quot;);</span>
+<span class="nc" id="L79">            syncLogMapper.insert(logEntity);</span>
+<span class="nc" id="L80">            return true;</span>
+<span class="nc" id="L81">        } catch (HttpStatusCodeException e) {</span>
+<span class="nc" id="L82">            log.warn(&quot;GitHub sync failed for {}/{}: {}&quot;, entity.getOwner(), entity.getRepo(), e.getStatusCode());</span>
+<span class="nc" id="L83">            entity.setSyncStatus(&quot;stale&quot;);</span>
+<span class="nc" id="L84">            logEntity.setStatus(&quot;failed&quot;);</span>
+<span class="nc" id="L85">            logEntity.setErrorMessage(e.getStatusCode() + &quot;: &quot; + e.getResponseBodyAsString());</span>
+<span class="nc" id="L86">            syncLogMapper.insert(logEntity);</span>
+<span class="nc" id="L87">            return false;</span>
+<span class="nc" id="L88">        } catch (Exception e) {</span>
+<span class="nc" id="L89">            log.warn(&quot;GitHub sync error: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L90">            entity.setSyncStatus(&quot;failed&quot;);</span>
+<span class="nc" id="L91">            logEntity.setStatus(&quot;failed&quot;);</span>
+<span class="nc" id="L92">            logEntity.setErrorMessage(e.getMessage());</span>
+<span class="nc" id="L93">            syncLogMapper.insert(logEntity);</span>
+<span class="nc" id="L94">            return false;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

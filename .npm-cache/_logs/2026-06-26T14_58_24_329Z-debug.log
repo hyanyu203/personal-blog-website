@@ -1,0 +1,39 @@
+0 info it worked if it ends with ok
+1 verbose cli [
+1 verbose cli   'D:\\node.js\\node.exe',
+1 verbose cli   'D:\\node.js\\node_modules\\npm\\bin\\npm-cli.js',
+1 verbose cli   'run',
+1 verbose cli   'build'
+1 verbose cli ]
+2 info using npm@6.14.18
+3 info using node@v14.21.3
+4 verbose run-script [ 'prebuild', 'build', 'postbuild' ]
+5 info lifecycle jiangou-admin@1.0.0~prebuild: jiangou-admin@1.0.0
+6 info lifecycle jiangou-admin@1.0.0~build: jiangou-admin@1.0.0
+7 verbose lifecycle jiangou-admin@1.0.0~build: unsafe-perm in lifecycle true
+8 verbose lifecycle jiangou-admin@1.0.0~build: PATH: D:\node.js\node_modules\npm\node_modules\npm-lifecycle\node-gyp-bin;C:\Users\Lenovo\Documents\博客网站平台\admin\node_modules\.bin;C:\Users\Lenovo\.codex\tmp\arg0\codex-arg0S9djlx;D:\python3.7\Scripts\;D:\python3.7\;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files\Docker\Docker\resources\bin;D:\Git\cmd;D:\Bandizip;C:\Program Files\dotnet\;D:\node.js\;C:\Users\Lenovo\AppData\Local\Microsoft\WindowsApps;D:\Microsoft VS Code\bin;C:\Program Files\JetBrains\IntelliJ IDEA 2024.1.4\bin;D:\JAVAJDK\bin;D:\cursor\resources\app\bin;D:\Erlang OTP\bin;D:\rabbitMQ\rabbitmq_server-4.2.5\sbin;C:\Users\Lenovo\.dotnet\tools;C:\Users\Lenovo\AppData\Roaming\npm;C:\Users\Lenovo\AppData\Local\OpenAI\Codex\bin\ada252862d154cdd;C:\Program Files\WindowsApps\OpenAI.Codex_26.616.10790.0_x64__2p2nqsd0c76g0\app\resources
+9 verbose lifecycle jiangou-admin@1.0.0~build: CWD: C:\Users\Lenovo\Documents\博客网站平台\admin
+10 silly lifecycle jiangou-admin@1.0.0~build: Args: [ '/d /s /c', 'vite build' ]
+11 silly lifecycle jiangou-admin@1.0.0~build: Returned: code: 1  signal: null
+12 info lifecycle jiangou-admin@1.0.0~build: Failed to exec build script
+13 verbose stack Error: jiangou-admin@1.0.0 build: `vite build`
+13 verbose stack Exit status 1
+13 verbose stack     at EventEmitter.<anonymous> (D:\node.js\node_modules\npm\node_modules\npm-lifecycle\index.js:332:16)
+13 verbose stack     at EventEmitter.emit (events.js:400:28)
+13 verbose stack     at ChildProcess.<anonymous> (D:\node.js\node_modules\npm\node_modules\npm-lifecycle\lib\spawn.js:55:14)
+13 verbose stack     at ChildProcess.emit (events.js:400:28)
+13 verbose stack     at maybeClose (internal/child_process.js:1088:16)
+13 verbose stack     at Process.ChildProcess._handle.onexit (internal/child_process.js:296:5)
+14 verbose pkgid jiangou-admin@1.0.0
+15 verbose cwd C:\Users\Lenovo\Documents\博客网站平台\admin
+16 verbose Windows_NT 10.0.22621
+17 verbose argv "D:\\node.js\\node.exe" "D:\\node.js\\node_modules\\npm\\bin\\npm-cli.js" "run" "build"
+18 verbose node v14.21.3
+19 verbose npm  v6.14.18
+20 error code ELIFECYCLE
+21 error errno 1
+22 error jiangou-admin@1.0.0 build: `vite build`
+22 error Exit status 1
+23 error Failed at the jiangou-admin@1.0.0 build script.
+23 error This is probably not a problem with npm. There is likely additional logging output above.
+24 verbose exit [ 1, true ]

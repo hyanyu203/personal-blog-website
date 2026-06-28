@@ -1,0 +1,16 @@
+# CD 部署覆盖：与 docker-compose.prod.yml 联用，拉取 GHCR 预构建镜像。
+# 本地仍用: docker compose -f docker-compose.prod.yml up -d --build
+#
+#   export JIANGOU_BACKEND_IMAGE=ghcr.io/owner/jiangou-backend:sha
+#   export JIANGOU_FRONTEND_IMAGE=ghcr.io/owner/jiangou-frontend:sha
+#   export JIANGOU_NGINX_IMAGE=ghcr.io/owner/jiangou-nginx:sha
+#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.cd.yml pull backend frontend nginx
+#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.cd.yml up -d --no-build
+
+services:
+  backend:
+    image: ${JIANGOU_BACKEND_IMAGE:?set JIANGOU_BACKEND_IMAGE}
+  frontend:
+    image: ${JIANGOU_FRONTEND_IMAGE:?set JIANGOU_FRONTEND_IMAGE}
+  nginx:
+    image: ${JIANGOU_NGINX_IMAGE:?set JIANGOU_NGINX_IMAGE}

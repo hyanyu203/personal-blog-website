@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CsrfCookieService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.security</a> &gt; <span class="el_source">CsrfCookieService.java</span></div><h1>CsrfCookieService.java</h1><pre class="source lang-java linenums">package com.jiangou.security;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseCookie;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.util.UUID;
+
+@Service
+<span class="nc" id="L14">public class CsrfCookieService {</span>
+
+    public static final String CSRF_COOKIE = &quot;XSRF-TOKEN&quot;;
+    public static final String CSRF_HEADER = &quot;X-XSRF-TOKEN&quot;;
+
+    private static final long CSRF_MAX_AGE_SEC = 8 * 60 * 60;
+
+    @Value(&quot;${jiangou.jwt.cookie-secure:false}&quot;)
+    private boolean cookieSecure;
+
+    public void ensureToken(HttpServletRequest request, HttpServletResponse response) {
+<span class="nc bnc" id="L25" title="All 2 branches missed.">        if (StringUtils.hasText(readCookie(request, CSRF_COOKIE))) {</span>
+<span class="nc" id="L26">            return;</span>
+        }
+<span class="nc" id="L28">        issueFreshToken(response);</span>
+<span class="nc" id="L29">    }</span>
+
+    public void issueFreshToken(HttpServletResponse response) {
+<span class="nc" id="L32">        writeToken(response, generateToken());</span>
+<span class="nc" id="L33">    }</span>
+
+    public boolean validate(HttpServletRequest request) {
+<span class="nc" id="L36">        String cookie = readCookie(request, CSRF_COOKIE);</span>
+<span class="nc" id="L37">        String header = request.getHeader(CSRF_HEADER);</span>
+<span class="nc bnc" id="L38" title="All 4 branches missed.">        return StringUtils.hasText(cookie) &amp;&amp; cookie.equals(header);</span>
+    }
+
+    private String generateToken() {
+<span class="nc" id="L42">        return UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;);</span>
+    }
+
+    private void writeToken(HttpServletResponse response, String token) {
+<span class="nc" id="L46">        response.addHeader(&quot;Set-Cookie&quot;, ResponseCookie.from(CSRF_COOKIE, token)</span>
+<span class="nc" id="L47">                .httpOnly(false)</span>
+<span class="nc" id="L48">                .secure(cookieSecure)</span>
+<span class="nc" id="L49">                .path(&quot;/&quot;)</span>
+<span class="nc" id="L50">                .maxAge(CSRF_MAX_AGE_SEC)</span>
+<span class="nc" id="L51">                .sameSite(&quot;Lax&quot;)</span>
+<span class="nc" id="L52">                .build()</span>
+<span class="nc" id="L53">                .toString());</span>
+<span class="nc" id="L54">    }</span>
+
+    private String readCookie(HttpServletRequest request, String name) {
+<span class="nc" id="L57">        Cookie[] cookies = request.getCookies();</span>
+<span class="nc bnc" id="L58" title="All 2 branches missed.">        if (cookies == null) {</span>
+<span class="nc" id="L59">            return null;</span>
+        }
+<span class="nc bnc" id="L61" title="All 2 branches missed.">        for (Cookie cookie : cookies) {</span>
+<span class="nc bnc" id="L62" title="All 2 branches missed.">            if (name.equals(cookie.getName())) {</span>
+<span class="nc" id="L63">                return cookie.getValue();</span>
+            }
+        }
+<span class="nc" id="L66">        return null;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

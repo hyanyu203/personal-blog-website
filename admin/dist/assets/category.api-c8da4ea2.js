@@ -1,0 +1,1 @@
+import{D as t}from"./index-d3b923e4.js";function n(){return t.get("/admin/categories")}function o(e){return t.post("/admin/categories",e)}function i(e,a){return t.patch(`/admin/categories/${e}`,a)}function c(e){return t.delete(`/admin/categories/${e}`)}export{o as c,c as d,n as f,i as u};

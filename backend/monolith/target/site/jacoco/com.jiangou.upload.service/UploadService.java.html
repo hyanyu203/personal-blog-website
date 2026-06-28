@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UploadService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.upload.service</a> &gt; <span class="el_source">UploadService.java</span></div><h1>UploadService.java</h1><pre class="source lang-java linenums">package com.jiangou.upload.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jiangou.common.exception.NotFoundException;
+import com.jiangou.common.exception.ValidationException;
+import com.jiangou.common.result.PageResult;
+import com.jiangou.config.MinioConfig.MinioProperties;
+import com.jiangou.upload.entity.AttachmentEntity;
+import com.jiangou.upload.mapper.AttachmentMapper;
+import com.jiangou.upload.vo.AttachmentVO;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
+
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.security.MessageDigest;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+@Service
+public class UploadService {
+
+    private static final long MAX_UPLOAD_BYTES = 10L * 1024 * 1024;
+<span class="nc" id="L36">    private static final Set&lt;String&gt; ALLOWED = new HashSet&lt;String&gt;(Arrays.asList(</span>
+            &quot;image/jpeg&quot;, &quot;image/png&quot;, &quot;image/gif&quot;, &quot;image/webp&quot;, &quot;application/pdf&quot;));
+
+    private final AttachmentMapper attachmentMapper;
+    private final MinioClient minioClient;
+    private final MinioProperties minioProperties;
+
+    public UploadService(AttachmentMapper attachmentMapper, MinioClient minioClient,
+<span class="nc" id="L44">                         MinioProperties minioProperties) {</span>
+<span class="nc" id="L45">        this.attachmentMapper = attachmentMapper;</span>
+<span class="nc" id="L46">        this.minioClient = minioClient;</span>
+<span class="nc" id="L47">        this.minioProperties = minioProperties;</span>
+<span class="nc" id="L48">    }</span>
+
+    public PageResult&lt;AttachmentVO&gt; listAdmin(long page, long pageSize) {
+<span class="nc" id="L51">        Page&lt;AttachmentEntity&gt; result = attachmentMapper.selectPage(new Page&lt;&gt;(page, pageSize),</span>
+                new LambdaQueryWrapper&lt;AttachmentEntity&gt;()
+<span class="nc" id="L53">                        .isNull(AttachmentEntity::getDeletedAt)</span>
+<span class="nc" id="L54">                        .orderByDesc(AttachmentEntity::getCreatedAt));</span>
+<span class="nc" id="L55">        return PageResult.of(result.getRecords().stream().map(this::toVo).collect(Collectors.toList()),</span>
+<span class="nc" id="L56">                result.getTotal(), page, pageSize);</span>
+    }
+
+    @Transactional
+    public AttachmentVO upload(MultipartFile file, Long uploaderId) {
+<span class="nc bnc" id="L61" title="All 2 branches missed.">        if (minioClient == null) {</span>
+<span class="nc" id="L62">            throw new ValidationException(&quot;MinIO is not available&quot;);</span>
+        }
+<span class="nc bnc" id="L64" title="All 4 branches missed.">        if (file == null || file.isEmpty()) {</span>
+<span class="nc" id="L65">            throw new ValidationException(&quot;File must not be empty&quot;);</span>
+        }
+<span class="nc bnc" id="L67" title="All 2 branches missed.">        if (file.getSize() &gt; MAX_UPLOAD_BYTES) {</span>
+<span class="nc" id="L68">            throw new ValidationException(&quot;File must not exceed 10MB&quot;);</span>
+        }
+
+<span class="nc" id="L71">        byte[] bytes = readBytes(file);</span>
+<span class="nc" id="L72">        String mime = detectMime(bytes);</span>
+<span class="nc bnc" id="L73" title="All 2 branches missed.">        if (!ALLOWED.contains(mime)) {</span>
+<span class="nc" id="L74">            throw new ValidationException(&quot;Unsupported file type&quot;);</span>
+        }
+<span class="nc" id="L76">        ImageInfo imageInfo = validateImage(bytes, mime);</span>
+
+<span class="nc" id="L78">        String originalFilename = safeOriginalFilename(file.getOriginalFilename());</span>
+<span class="nc" id="L79">        String objectKey = buildObjectKey(mime);</span>
+<span class="nc" id="L80">        try (ByteArrayInputStream in = new ByteArrayInputStream(bytes)) {</span>
+<span class="nc" id="L81">            minioClient.putObject(PutObjectArgs.builder()</span>
+<span class="nc" id="L82">                    .bucket(minioProperties.getBucket())</span>
+<span class="nc" id="L83">                    .object(objectKey)</span>
+<span class="nc" id="L84">                    .stream(in, bytes.length, -1)</span>
+<span class="nc" id="L85">                    .contentType(mime)</span>
+<span class="nc" id="L86">                    .build());</span>
+<span class="nc" id="L87">        } catch (Exception e) {</span>
+<span class="nc" id="L88">            throw new ValidationException(&quot;文件上传失败，请稍后重试&quot;);</span>
+<span class="nc" id="L89">        }</span>
+
+<span class="nc" id="L91">        AttachmentEntity entity = new AttachmentEntity();</span>
+<span class="nc" id="L92">        entity.setUploaderId(uploaderId);</span>
+<span class="nc" id="L93">        entity.setFilename(originalFilename);</span>
+<span class="nc" id="L94">        entity.setObjectKey(objectKey);</span>
+<span class="nc" id="L95">        entity.setUrl(buildPublicUrl(objectKey));</span>
+<span class="nc" id="L96">        entity.setMimeType(mime);</span>
+<span class="nc" id="L97">        entity.setSizeBytes((long) bytes.length);</span>
+<span class="nc" id="L98">        entity.setWidth(imageInfo.getWidth());</span>
+<span class="nc" id="L99">        entity.setHeight(imageInfo.getHeight());</span>
+<span class="nc" id="L100">        entity.setSha256(sha256(bytes));</span>
+<span class="nc" id="L101">        entity.setStatus(&quot;ready&quot;);</span>
+<span class="nc" id="L102">        entity.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L103">        entity.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L104">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L105">        attachmentMapper.insert(entity);</span>
+<span class="nc" id="L106">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public void delete(Long id) {
+<span class="nc" id="L111">        AttachmentEntity entity = attachmentMapper.selectOne(new LambdaQueryWrapper&lt;AttachmentEntity&gt;()</span>
+<span class="nc" id="L112">                .eq(AttachmentEntity::getId, id).isNull(AttachmentEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L113" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L114">            throw new NotFoundException(&quot;Attachment does not exist&quot;);</span>
+        }
+<span class="nc bnc" id="L116" title="All 2 branches missed.">        if (minioClient != null) {</span>
+            try {
+<span class="nc" id="L118">                minioClient.removeObject(RemoveObjectArgs.builder()</span>
+<span class="nc" id="L119">                        .bucket(minioProperties.getBucket())</span>
+<span class="nc" id="L120">                        .object(entity.getObjectKey())</span>
+<span class="nc" id="L121">                        .build());</span>
+<span class="nc" id="L122">            } catch (Exception ignored) {</span>
+                // Object may already be gone.
+<span class="nc" id="L124">            }</span>
+        }
+<span class="nc" id="L126">        entity.setDeletedAt(LocalDateTime.now());</span>
+<span class="nc" id="L127">        attachmentMapper.updateById(entity);</span>
+<span class="nc" id="L128">    }</span>
+
+    private byte[] readBytes(MultipartFile file) {
+        try {
+<span class="nc" id="L132">            return file.getBytes();</span>
+<span class="nc" id="L133">        } catch (Exception e) {</span>
+<span class="nc" id="L134">            throw new ValidationException(&quot;Failed to read file&quot;);</span>
+        }
+    }
+
+    private String detectMime(byte[] bytes) {
+<span class="nc bnc" id="L139" title="All 4 branches missed.">        if (bytes == null || bytes.length &lt; 4) {</span>
+<span class="nc" id="L140">            return &quot;&quot;;</span>
+        }
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        if (startsWith(bytes, new int[]{0xFF, 0xD8, 0xFF})) {</span>
+<span class="nc" id="L143">            return &quot;image/jpeg&quot;;</span>
+        }
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        if (startsWith(bytes, new int[]{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A})) {</span>
+<span class="nc" id="L146">            return &quot;image/png&quot;;</span>
+        }
+<span class="nc bnc" id="L148" title="All 4 branches missed.">        if (startsWithAscii(bytes, &quot;GIF87a&quot;) || startsWithAscii(bytes, &quot;GIF89a&quot;)) {</span>
+<span class="nc" id="L149">            return &quot;image/gif&quot;;</span>
+        }
+<span class="nc bnc" id="L151" title="All 12 branches missed.">        if (bytes.length &gt;= 12 &amp;&amp; startsWithAscii(bytes, &quot;RIFF&quot;)</span>
+                &amp;&amp; bytes[8] == 'W' &amp;&amp; bytes[9] == 'E' &amp;&amp; bytes[10] == 'B' &amp;&amp; bytes[11] == 'P') {
+<span class="nc" id="L153">            return &quot;image/webp&quot;;</span>
+        }
+<span class="nc bnc" id="L155" title="All 2 branches missed.">        if (startsWithAscii(bytes, &quot;%PDF-&quot;)) {</span>
+<span class="nc" id="L156">            return &quot;application/pdf&quot;;</span>
+        }
+<span class="nc" id="L158">        return &quot;&quot;;</span>
+    }
+
+    private ImageInfo validateImage(byte[] bytes, String mime) {
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        if (&quot;application/pdf&quot;.equals(mime)) {</span>
+<span class="nc" id="L163">            return ImageInfo.empty();</span>
+        }
+<span class="nc bnc" id="L165" title="All 2 branches missed.">        if (&quot;image/webp&quot;.equals(mime)) {</span>
+<span class="nc" id="L166">            validateWebp(bytes);</span>
+<span class="nc" id="L167">            return ImageInfo.empty();</span>
+        }
+<span class="nc bnc" id="L169" title="All 2 branches missed.">        if (!mime.startsWith(&quot;image/&quot;)) {</span>
+<span class="nc" id="L170">            return ImageInfo.empty();</span>
+        }
+        try {
+<span class="nc" id="L173">            BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));</span>
+<span class="nc bnc" id="L174" title="All 2 branches missed.">            if (image == null) {</span>
+<span class="nc" id="L175">                throw new ValidationException(&quot;Invalid image file&quot;);</span>
+            }
+<span class="nc" id="L177">            return new ImageInfo(image.getWidth(), image.getHeight());</span>
+<span class="nc" id="L178">        } catch (ValidationException e) {</span>
+<span class="nc" id="L179">            throw e;</span>
+<span class="nc" id="L180">        } catch (Exception e) {</span>
+<span class="nc" id="L181">            throw new ValidationException(&quot;Invalid image file&quot;);</span>
+        }
+    }
+
+    private void validateWebp(byte[] bytes) {
+<span class="nc bnc" id="L186" title="All 12 branches missed.">        if (bytes.length &lt; 16 || !startsWithAscii(bytes, &quot;RIFF&quot;)</span>
+                || bytes[8] != 'W' || bytes[9] != 'E' || bytes[10] != 'B' || bytes[11] != 'P') {
+<span class="nc" id="L188">            throw new ValidationException(&quot;Invalid image file&quot;);</span>
+        }
+<span class="nc" id="L190">        String chunk = new String(bytes, 12, 4, java.nio.charset.StandardCharsets.US_ASCII);</span>
+<span class="nc bnc" id="L191" title="All 6 branches missed.">        if (!&quot;VP8 &quot;.equals(chunk) &amp;&amp; !&quot;VP8L&quot;.equals(chunk) &amp;&amp; !&quot;VP8X&quot;.equals(chunk)) {</span>
+<span class="nc" id="L192">            throw new ValidationException(&quot;Invalid image file&quot;);</span>
+        }
+<span class="nc" id="L194">    }</span>
+
+    private boolean startsWith(byte[] bytes, int[] signature) {
+<span class="nc bnc" id="L197" title="All 2 branches missed.">        if (bytes.length &lt; signature.length) {</span>
+<span class="nc" id="L198">            return false;</span>
+        }
+<span class="nc bnc" id="L200" title="All 2 branches missed.">        for (int i = 0; i &lt; signature.length; i++) {</span>
+<span class="nc bnc" id="L201" title="All 2 branches missed.">            if ((bytes[i] &amp; 0xFF) != signature[i]) {</span>
+<span class="nc" id="L202">                return false;</span>
+            }
+        }
+<span class="nc" id="L205">        return true;</span>
+    }
+
+    private boolean startsWithAscii(byte[] bytes, String signature) {
+<span class="nc bnc" id="L209" title="All 2 branches missed.">        if (bytes.length &lt; signature.length()) {</span>
+<span class="nc" id="L210">            return false;</span>
+        }
+<span class="nc bnc" id="L212" title="All 2 branches missed.">        for (int i = 0; i &lt; signature.length(); i++) {</span>
+<span class="nc bnc" id="L213" title="All 2 branches missed.">            if (bytes[i] != (byte) signature.charAt(i)) {</span>
+<span class="nc" id="L214">                return false;</span>
+            }
+        }
+<span class="nc" id="L217">        return true;</span>
+    }
+
+    private String safeOriginalFilename(String filename) {
+<span class="nc bnc" id="L221" title="All 2 branches missed.">        if (!StringUtils.hasText(filename)) {</span>
+<span class="nc" id="L222">            return &quot;upload&quot;;</span>
+        }
+<span class="nc" id="L224">        String normalized = filename.replace('\\', '/');</span>
+<span class="nc" id="L225">        int slash = normalized.lastIndexOf('/');</span>
+<span class="nc bnc" id="L226" title="All 2 branches missed.">        if (slash &gt;= 0) {</span>
+<span class="nc" id="L227">            normalized = normalized.substring(slash + 1);</span>
+        }
+<span class="nc" id="L229">        normalized = normalized.replaceAll(&quot;[\\r\\n\\t]&quot;, &quot;_&quot;).trim();</span>
+<span class="nc bnc" id="L230" title="All 2 branches missed.">        return normalized.isEmpty() ? &quot;upload&quot; : normalized;</span>
+    }
+
+    private String buildObjectKey(String mime) {
+<span class="nc" id="L234">        return &quot;uploads/&quot; + LocalDate.now() + &quot;/&quot; + UUID.randomUUID() + extensionFor(mime);</span>
+    }
+
+    private String extensionFor(String mime) {
+<span class="nc bnc" id="L238" title="All 2 branches missed.">        if (&quot;image/jpeg&quot;.equals(mime)) {</span>
+<span class="nc" id="L239">            return &quot;.jpg&quot;;</span>
+        }
+<span class="nc bnc" id="L241" title="All 2 branches missed.">        if (&quot;image/png&quot;.equals(mime)) {</span>
+<span class="nc" id="L242">            return &quot;.png&quot;;</span>
+        }
+<span class="nc bnc" id="L244" title="All 2 branches missed.">        if (&quot;image/gif&quot;.equals(mime)) {</span>
+<span class="nc" id="L245">            return &quot;.gif&quot;;</span>
+        }
+<span class="nc bnc" id="L247" title="All 2 branches missed.">        if (&quot;image/webp&quot;.equals(mime)) {</span>
+<span class="nc" id="L248">            return &quot;.webp&quot;;</span>
+        }
+<span class="nc bnc" id="L250" title="All 2 branches missed.">        if (&quot;application/pdf&quot;.equals(mime)) {</span>
+<span class="nc" id="L251">            return &quot;.pdf&quot;;</span>
+        }
+<span class="nc" id="L253">        return &quot;.bin&quot;;</span>
+    }
+
+    private String buildPublicUrl(String objectKey) {
+<span class="nc bnc" id="L257" title="All 2 branches missed.">        String endpoint = StringUtils.hasText(minioProperties.getPublicEndpoint())</span>
+<span class="nc" id="L258">                ? minioProperties.getPublicEndpoint()</span>
+<span class="nc" id="L259">                : minioProperties.getEndpoint();</span>
+<span class="nc bnc" id="L260" title="All 2 branches missed.">        while (endpoint.endsWith(&quot;/&quot;)) {</span>
+<span class="nc" id="L261">            endpoint = endpoint.substring(0, endpoint.length() - 1);</span>
+        }
+<span class="nc" id="L263">        return endpoint + &quot;/&quot; + minioProperties.getBucket() + &quot;/&quot; + objectKey;</span>
+    }
+
+    private String sha256(byte[] bytes) {
+        try {
+<span class="nc" id="L268">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="nc" id="L269">            byte[] hash = digest.digest(bytes);</span>
+<span class="nc" id="L270">            StringBuilder sb = new StringBuilder();</span>
+<span class="nc bnc" id="L271" title="All 2 branches missed.">            for (byte b : hash) {</span>
+<span class="nc" id="L272">                sb.append(String.format(&quot;%02x&quot;, b));</span>
+            }
+<span class="nc" id="L274">            return sb.toString();</span>
+<span class="nc" id="L275">        } catch (Exception e) {</span>
+<span class="nc" id="L276">            return null;</span>
+        }
+    }
+
+    private AttachmentVO toVo(AttachmentEntity e) {
+<span class="nc" id="L281">        return AttachmentVO.builder()</span>
+<span class="nc" id="L282">                .id(e.getId()).filename(e.getFilename()).url(e.getUrl())</span>
+<span class="nc" id="L283">                .mimeType(e.getMimeType()).sizeBytes(e.getSizeBytes())</span>
+<span class="nc" id="L284">                .width(e.getWidth()).height(e.getHeight()).createdAt(e.getCreatedAt()).build();</span>
+    }
+
+    private static class ImageInfo {
+        private final Integer width;
+        private final Integer height;
+
+<span class="nc" id="L291">        private ImageInfo(Integer width, Integer height) {</span>
+<span class="nc" id="L292">            this.width = width;</span>
+<span class="nc" id="L293">            this.height = height;</span>
+<span class="nc" id="L294">        }</span>
+
+        private static ImageInfo empty() {
+<span class="nc" id="L297">            return new ImageInfo(null, null);</span>
+        }
+
+        private Integer getWidth() {
+<span class="nc" id="L301">            return width;</span>
+        }
+
+        private Integer getHeight() {
+<span class="nc" id="L305">            return height;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

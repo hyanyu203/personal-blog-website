@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CaptchaService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.auth.service</a> &gt; <span class="el_source">CaptchaService.java</span></div><h1>CaptchaService.java</h1><pre class="source lang-java linenums">package com.jiangou.auth.service;
+
+import com.jiangou.auth.vo.CaptchaVO;
+import com.jiangou.common.constant.ErrorCodes;
+import com.jiangou.common.exception.BusinessException;
+import com.jiangou.config.AuthProperties;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
+
+import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.Base64;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+@Service
+public class CaptchaService {
+
+<span class="nc" id="L26">    private static final char[] CHARS = &quot;ABCDEFGHJKLMNPQRSTUVWXYZ23456789&quot;.toCharArray();</span>
+    private static final String PREFIX = &quot;captcha:&quot;;
+
+    private final StringRedisTemplate redisTemplate;
+    private final AuthProperties authProperties;
+<span class="nc" id="L31">    private final SecureRandom random = new SecureRandom();</span>
+
+<span class="nc" id="L33">    public CaptchaService(StringRedisTemplate redisTemplate, AuthProperties authProperties) {</span>
+<span class="nc" id="L34">        this.redisTemplate = redisTemplate;</span>
+<span class="nc" id="L35">        this.authProperties = authProperties;</span>
+<span class="nc" id="L36">    }</span>
+
+    public CaptchaVO generate() {
+<span class="nc" id="L39">        return generateWithCode(randomCode(4));</span>
+    }
+
+    protected CaptchaVO generateWithCode(String code) {
+<span class="nc" id="L43">        String captchaId = UUID.randomUUID().toString();</span>
+<span class="nc" id="L44">        redisTemplate.opsForValue().set(</span>
+                PREFIX + captchaId,
+<span class="nc" id="L46">                hash(code),</span>
+<span class="nc" id="L47">                authProperties.getCaptchaTtlSeconds(),</span>
+                TimeUnit.SECONDS);
+<span class="nc" id="L49">        return CaptchaVO.builder()</span>
+<span class="nc" id="L50">                .captchaId(captchaId)</span>
+<span class="nc" id="L51">                .imageBase64(renderImage(code))</span>
+<span class="nc" id="L52">                .build();</span>
+    }
+
+    public void verifyAndConsume(String captchaId, String captchaCode) {
+<span class="nc bnc" id="L56" title="All 8 branches missed.">        if (captchaId == null || captchaId.isEmpty() || captchaCode == null || captchaCode.isEmpty()) {</span>
+<span class="nc" id="L57">            throw new BusinessException(ErrorCodes.INVALID_CAPTCHA, &quot;图形验证码错误&quot;);</span>
+        }
+<span class="nc" id="L59">        String key = PREFIX + captchaId;</span>
+<span class="nc" id="L60">        String stored = redisTemplate.opsForValue().get(key);</span>
+<span class="nc" id="L61">        redisTemplate.delete(key);</span>
+<span class="nc bnc" id="L62" title="All 4 branches missed.">        if (stored == null || !stored.equalsIgnoreCase(hash(captchaCode.trim()))) {</span>
+<span class="nc" id="L63">            throw new BusinessException(ErrorCodes.INVALID_CAPTCHA, &quot;图形验证码错误或已过期&quot;);</span>
+        }
+<span class="nc" id="L65">    }</span>
+
+    private String randomCode(int length) {
+<span class="nc" id="L68">        StringBuilder sb = new StringBuilder(length);</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        for (int i = 0; i &lt; length; i++) {</span>
+<span class="nc" id="L70">            sb.append(CHARS[random.nextInt(CHARS.length)]);</span>
+        }
+<span class="nc" id="L72">        return sb.toString();</span>
+    }
+
+    private String hash(String code) {
+<span class="nc" id="L76">        return DigestUtils.md5DigestAsHex(code.toLowerCase().getBytes(StandardCharsets.UTF_8));</span>
+    }
+
+    protected String renderImage(String code) {
+<span class="nc" id="L80">        int width = 120;</span>
+<span class="nc" id="L81">        int height = 40;</span>
+<span class="nc" id="L82">        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);</span>
+<span class="nc" id="L83">        Graphics2D g = image.createGraphics();</span>
+<span class="nc" id="L84">        g.setColor(new Color(245, 245, 245));</span>
+<span class="nc" id="L85">        g.fillRect(0, 0, width, height);</span>
+<span class="nc" id="L86">        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 24));</span>
+<span class="nc bnc" id="L87" title="All 2 branches missed.">        for (int i = 0; i &lt; 6; i++) {</span>
+<span class="nc" id="L88">            g.setColor(new Color(random.nextInt(200), random.nextInt(200), random.nextInt(200)));</span>
+<span class="nc" id="L89">            g.drawLine(random.nextInt(width), random.nextInt(height), random.nextInt(width), random.nextInt(height));</span>
+        }
+<span class="nc" id="L91">        g.setColor(new Color(30, 30, 30));</span>
+<span class="nc" id="L92">        g.drawString(code, 18, 28);</span>
+<span class="nc" id="L93">        g.dispose();</span>
+        try {
+<span class="nc" id="L95">            ByteArrayOutputStream baos = new ByteArrayOutputStream();</span>
+<span class="nc" id="L96">            ImageIO.write(image, &quot;png&quot;, baos);</span>
+<span class="nc" id="L97">            return &quot;data:image/png;base64,&quot; + Base64.getEncoder().encodeToString(baos.toByteArray());</span>
+<span class="nc" id="L98">        } catch (Exception e) {</span>
+<span class="nc" id="L99">            throw new IllegalStateException(&quot;Failed to render captcha&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

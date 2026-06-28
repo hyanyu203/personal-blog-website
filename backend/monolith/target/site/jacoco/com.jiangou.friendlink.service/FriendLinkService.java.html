@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FriendLinkService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.friendlink.service</a> &gt; <span class="el_source">FriendLinkService.java</span></div><h1>FriendLinkService.java</h1><pre class="source lang-java linenums">package com.jiangou.friendlink.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jiangou.common.exception.NotFoundException;
+import com.jiangou.common.exception.ValidationException;
+import com.jiangou.common.util.UrlSafetyUtils;
+import com.jiangou.common.result.PageResult;
+import com.jiangou.friendlink.dto.FriendLinkApplyDTO;
+import com.jiangou.friendlink.dto.FriendLinkDTO;
+import com.jiangou.friendlink.entity.FriendLinkEntity;
+import com.jiangou.friendlink.mapper.FriendLinkMapper;
+import com.jiangou.friendlink.vo.FriendLinkVO;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class FriendLinkService {
+
+    private final FriendLinkMapper friendLinkMapper;
+
+<span class="nc" id="L26">    public FriendLinkService(FriendLinkMapper friendLinkMapper) {</span>
+<span class="nc" id="L27">        this.friendLinkMapper = friendLinkMapper;</span>
+<span class="nc" id="L28">    }</span>
+
+    public List&lt;FriendLinkVO&gt; listApproved() {
+<span class="nc" id="L31">        return friendLinkMapper.selectList(new LambdaQueryWrapper&lt;FriendLinkEntity&gt;()</span>
+<span class="nc" id="L32">                        .eq(FriendLinkEntity::getStatus, &quot;approved&quot;)</span>
+<span class="nc" id="L33">                        .isNull(FriendLinkEntity::getDeletedAt)</span>
+<span class="nc" id="L34">                        .orderByAsc(FriendLinkEntity::getSortOrder))</span>
+<span class="nc" id="L35">                .stream().map(this::toVo).collect(Collectors.toList());</span>
+    }
+
+    public PageResult&lt;FriendLinkVO&gt; listAdmin(long page, long pageSize, String status) {
+<span class="nc" id="L39">        LambdaQueryWrapper&lt;FriendLinkEntity&gt; w = new LambdaQueryWrapper&lt;FriendLinkEntity&gt;()</span>
+<span class="nc" id="L40">                .isNull(FriendLinkEntity::getDeletedAt)</span>
+<span class="nc" id="L41">                .orderByDesc(FriendLinkEntity::getCreatedAt);</span>
+<span class="nc bnc" id="L42" title="All 2 branches missed.">        if (status != null) {</span>
+<span class="nc" id="L43">            w.eq(FriendLinkEntity::getStatus, status);</span>
+        }
+<span class="nc" id="L45">        Page&lt;FriendLinkEntity&gt; result = friendLinkMapper.selectPage(new Page&lt;&gt;(page, pageSize), w);</span>
+<span class="nc" id="L46">        List&lt;FriendLinkVO&gt; items = result.getRecords().stream().map(this::toVo).collect(Collectors.toList());</span>
+<span class="nc" id="L47">        return PageResult.of(items, result.getTotal(), page, pageSize);</span>
+    }
+
+    @Transactional
+    public FriendLinkVO create(FriendLinkDTO dto) {
+<span class="nc" id="L52">        FriendLinkEntity entity = new FriendLinkEntity();</span>
+<span class="nc" id="L53">        entity.setName(dto.getName());</span>
+<span class="nc" id="L54">        entity.setUrl(requireHttpUrl(dto.getUrl()));</span>
+<span class="nc" id="L55">        entity.setAvatarUrl(UrlSafetyUtils.normalizeOptionalHttpUrl(dto.getAvatarUrl()));</span>
+<span class="nc" id="L56">        entity.setDescription(dto.getDescription());</span>
+<span class="nc" id="L57">        entity.setOwnerEmail(dto.getOwnerEmail());</span>
+<span class="nc bnc" id="L58" title="All 2 branches missed.">        entity.setStatus(dto.getStatus() != null ? dto.getStatus() : &quot;approved&quot;);</span>
+<span class="nc bnc" id="L59" title="All 2 branches missed.">        entity.setSortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : 0);</span>
+<span class="nc" id="L60">        entity.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L61">        entity.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L62">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L63">        friendLinkMapper.insert(entity);</span>
+<span class="nc" id="L64">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public FriendLinkVO update(Long id, FriendLinkDTO dto) {
+<span class="nc" id="L69">        FriendLinkEntity entity = findActive(id);</span>
+<span class="nc bnc" id="L70" title="All 2 branches missed.">        if (dto.getName() != null) {</span>
+<span class="nc" id="L71">            entity.setName(dto.getName());</span>
+        }
+<span class="nc bnc" id="L73" title="All 2 branches missed.">        if (dto.getUrl() != null) {</span>
+<span class="nc" id="L74">            entity.setUrl(UrlSafetyUtils.normalizeOptionalHttpUrl(dto.getUrl()));</span>
+        }
+<span class="nc bnc" id="L76" title="All 2 branches missed.">        if (dto.getAvatarUrl() != null) {</span>
+<span class="nc" id="L77">            entity.setAvatarUrl(UrlSafetyUtils.normalizeOptionalHttpUrl(dto.getAvatarUrl()));</span>
+        }
+<span class="nc bnc" id="L79" title="All 2 branches missed.">        if (dto.getDescription() != null) {</span>
+<span class="nc" id="L80">            entity.setDescription(dto.getDescription());</span>
+        }
+<span class="nc bnc" id="L82" title="All 2 branches missed.">        if (dto.getOwnerEmail() != null) {</span>
+<span class="nc" id="L83">            entity.setOwnerEmail(dto.getOwnerEmail());</span>
+        }
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        if (dto.getStatus() != null) {</span>
+<span class="nc" id="L86">            entity.setStatus(dto.getStatus());</span>
+        }
+<span class="nc bnc" id="L88" title="All 2 branches missed.">        if (dto.getSortOrder() != null) {</span>
+<span class="nc" id="L89">            entity.setSortOrder(dto.getSortOrder());</span>
+        }
+<span class="nc" id="L91">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L92">        friendLinkMapper.updateById(entity);</span>
+<span class="nc" id="L93">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public FriendLinkVO apply(FriendLinkApplyDTO dto) {
+<span class="nc" id="L98">        FriendLinkEntity entity = new FriendLinkEntity();</span>
+<span class="nc" id="L99">        entity.setName(dto.getName());</span>
+<span class="nc" id="L100">        entity.setUrl(requireHttpUrl(dto.getUrl()));</span>
+<span class="nc" id="L101">        entity.setAvatarUrl(UrlSafetyUtils.normalizeOptionalHttpUrl(dto.getAvatarUrl()));</span>
+<span class="nc" id="L102">        entity.setDescription(dto.getDescription());</span>
+<span class="nc" id="L103">        entity.setOwnerEmail(dto.getOwnerEmail());</span>
+<span class="nc" id="L104">        entity.setStatus(&quot;pending&quot;);</span>
+<span class="nc" id="L105">        entity.setSortOrder(0);</span>
+<span class="nc" id="L106">        entity.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L107">        entity.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L108">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L109">        friendLinkMapper.insert(entity);</span>
+<span class="nc" id="L110">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public void approve(Long id) {
+<span class="nc" id="L115">        updateStatus(id, &quot;approved&quot;);</span>
+<span class="nc" id="L116">    }</span>
+
+    @Transactional
+    public void reject(Long id) {
+<span class="nc" id="L120">        updateStatus(id, &quot;rejected&quot;);</span>
+<span class="nc" id="L121">    }</span>
+
+    @Transactional
+    public void delete(Long id) {
+<span class="nc" id="L125">        FriendLinkEntity entity = findActive(id);</span>
+<span class="nc" id="L126">        entity.setDeletedAt(LocalDateTime.now());</span>
+<span class="nc" id="L127">        friendLinkMapper.updateById(entity);</span>
+<span class="nc" id="L128">    }</span>
+
+    private void updateStatus(Long id, String status) {
+<span class="nc" id="L131">        FriendLinkEntity entity = findActive(id);</span>
+<span class="nc" id="L132">        entity.setStatus(status);</span>
+<span class="nc" id="L133">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L134">        friendLinkMapper.updateById(entity);</span>
+<span class="nc" id="L135">    }</span>
+
+    private FriendLinkEntity findActive(Long id) {
+<span class="nc" id="L138">        FriendLinkEntity entity = friendLinkMapper.selectOne(new LambdaQueryWrapper&lt;FriendLinkEntity&gt;()</span>
+<span class="nc" id="L139">                .eq(FriendLinkEntity::getId, id).isNull(FriendLinkEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L140" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L141">            throw new NotFoundException(&quot;友链不存在&quot;);</span>
+        }
+<span class="nc" id="L143">        return entity;</span>
+    }
+
+    private String requireHttpUrl(String url) {
+<span class="nc" id="L147">        String normalized = UrlSafetyUtils.normalizeOptionalHttpUrl(url);</span>
+<span class="nc bnc" id="L148" title="All 2 branches missed.">        if (normalized == null) {</span>
+<span class="nc" id="L149">            throw new ValidationException(&quot;URL 不能为空&quot;);</span>
+        }
+<span class="nc" id="L151">        return normalized;</span>
+    }
+
+    private FriendLinkVO toVo(FriendLinkEntity e) {
+<span class="nc" id="L155">        return FriendLinkVO.builder()</span>
+<span class="nc" id="L156">                .id(e.getId()).name(e.getName()).url(e.getUrl())</span>
+<span class="nc" id="L157">                .avatarUrl(e.getAvatarUrl()).description(e.getDescription())</span>
+<span class="nc" id="L158">                .status(e.getStatus()).build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

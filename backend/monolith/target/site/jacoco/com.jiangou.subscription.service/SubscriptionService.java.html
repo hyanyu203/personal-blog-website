@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SubscriptionService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.subscription.service</a> &gt; <span class="el_source">SubscriptionService.java</span></div><h1>SubscriptionService.java</h1><pre class="source lang-java linenums">package com.jiangou.subscription.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jiangou.common.exception.NotFoundException;
+import com.jiangou.common.exception.ValidationException;
+import com.jiangou.common.result.PageResult;
+import com.jiangou.subscription.dto.SubscribeDTO;
+import com.jiangou.subscription.entity.SubscriptionEntity;
+import com.jiangou.subscription.mapper.SubscriptionMapper;
+import com.jiangou.subscription.vo.SubscriptionVO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+@Service
+public class SubscriptionService {
+
+<span class="fc" id="L28">    private static final Logger log = LoggerFactory.getLogger(SubscriptionService.class);</span>
+
+    private final SubscriptionMapper subscriptionMapper;
+    private final JavaMailSender mailSender;
+
+    @Value(&quot;${jiangou.site-url:http://localhost:3000}&quot;)
+    private String siteUrl;
+
+    @Value(&quot;${jiangou.site-title:渐构}&quot;)
+    private String siteTitle;
+
+<span class="fc" id="L39">    public SubscriptionService(SubscriptionMapper subscriptionMapper, JavaMailSender mailSender) {</span>
+<span class="fc" id="L40">        this.subscriptionMapper = subscriptionMapper;</span>
+<span class="fc" id="L41">        this.mailSender = mailSender;</span>
+<span class="fc" id="L42">    }</span>
+
+    @Transactional
+    public void subscribe(SubscribeDTO dto) {
+<span class="nc" id="L46">        SubscriptionEntity confirmed = subscriptionMapper.selectOne(new LambdaQueryWrapper&lt;SubscriptionEntity&gt;()</span>
+<span class="nc" id="L47">                .eq(SubscriptionEntity::getEmail, dto.getEmail())</span>
+<span class="nc" id="L48">                .eq(SubscriptionEntity::getStatus, &quot;confirmed&quot;));</span>
+<span class="nc bnc" id="L49" title="All 2 branches missed.">        if (confirmed != null) {</span>
+<span class="nc" id="L50">            return;</span>
+        }
+
+<span class="nc" id="L53">        String confirmToken = UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;);</span>
+<span class="nc" id="L54">        String unsubscribeToken = UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;);</span>
+
+<span class="nc" id="L56">        SubscriptionEntity entity = subscriptionMapper.selectOne(new LambdaQueryWrapper&lt;SubscriptionEntity&gt;()</span>
+<span class="nc" id="L57">                .eq(SubscriptionEntity::getEmail, dto.getEmail()));</span>
+<span class="nc bnc" id="L58" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L59">            entity = new SubscriptionEntity();</span>
+<span class="nc" id="L60">            entity.setEmail(dto.getEmail());</span>
+<span class="nc" id="L61">            entity.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L62">            entity.setCreatedAt(LocalDateTime.now());</span>
+        }
+<span class="nc" id="L64">        entity.setStatus(&quot;pending&quot;);</span>
+<span class="nc" id="L65">        entity.setConfirmToken(confirmToken);</span>
+<span class="nc" id="L66">        entity.setUnsubscribeToken(unsubscribeToken);</span>
+<span class="nc" id="L67">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">        if (entity.getId() == null) {</span>
+<span class="nc" id="L69">            subscriptionMapper.insert(entity);</span>
+        } else {
+<span class="nc" id="L71">            subscriptionMapper.updateById(entity);</span>
+        }
+
+<span class="nc" id="L74">        sendConfirmEmail(dto.getEmail(), confirmToken);</span>
+<span class="nc" id="L75">    }</span>
+
+    @Transactional
+    public void confirm(String token) {
+<span class="fc" id="L79">        SubscriptionEntity entity = subscriptionMapper.selectOne(new LambdaQueryWrapper&lt;SubscriptionEntity&gt;()</span>
+<span class="fc" id="L80">                .eq(SubscriptionEntity::getConfirmToken, token));</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">        if (entity == null) {</span>
+<span class="fc" id="L82">            throw new NotFoundException(&quot;无效的确认链接&quot;);</span>
+        }
+<span class="fc bfc" id="L84" title="All 2 branches covered.">        if (&quot;confirmed&quot;.equals(entity.getStatus())) {</span>
+<span class="fc" id="L85">            return;</span>
+        }
+<span class="fc bfc" id="L87" title="All 2 branches covered.">        if (!&quot;pending&quot;.equals(entity.getStatus())) {</span>
+<span class="fc" id="L88">            throw new ValidationException(&quot;该订阅链接已失效，请重新订阅&quot;);</span>
+        }
+<span class="fc" id="L90">        entity.setStatus(&quot;confirmed&quot;);</span>
+<span class="fc" id="L91">        entity.setConfirmToken(null);</span>
+<span class="fc" id="L92">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="fc" id="L93">        subscriptionMapper.updateById(entity);</span>
+<span class="fc" id="L94">    }</span>
+
+    @Transactional
+    public void unsubscribe(String token) {
+<span class="fc" id="L98">        SubscriptionEntity entity = subscriptionMapper.selectOne(new LambdaQueryWrapper&lt;SubscriptionEntity&gt;()</span>
+<span class="fc" id="L99">                .eq(SubscriptionEntity::getUnsubscribeToken, token));</span>
+<span class="pc bpc" id="L100" title="1 of 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L101">            throw new NotFoundException(&quot;无效的退订链接&quot;);</span>
+        }
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">        if (&quot;unsubscribed&quot;.equals(entity.getStatus())) {</span>
+<span class="nc" id="L104">            return;</span>
+        }
+<span class="fc" id="L106">        entity.setStatus(&quot;unsubscribed&quot;);</span>
+<span class="fc" id="L107">        entity.setConfirmToken(null);</span>
+<span class="fc" id="L108">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="fc" id="L109">        subscriptionMapper.updateById(entity);</span>
+<span class="fc" id="L110">    }</span>
+
+    public PageResult&lt;SubscriptionVO&gt; listAdmin(long page, long pageSize, String status) {
+<span class="nc" id="L113">        LambdaQueryWrapper&lt;SubscriptionEntity&gt; wrapper = new LambdaQueryWrapper&lt;SubscriptionEntity&gt;()</span>
+<span class="nc" id="L114">                .orderByDesc(SubscriptionEntity::getCreatedAt);</span>
+<span class="nc bnc" id="L115" title="All 4 branches missed.">        if (status != null &amp;&amp; !status.isEmpty()) {</span>
+<span class="nc" id="L116">            wrapper.eq(SubscriptionEntity::getStatus, status);</span>
+        }
+<span class="nc" id="L118">        Page&lt;SubscriptionEntity&gt; result = subscriptionMapper.selectPage(new Page&lt;&gt;(page, pageSize), wrapper);</span>
+<span class="nc" id="L119">        List&lt;SubscriptionVO&gt; items = result.getRecords().stream()</span>
+<span class="nc" id="L120">                .map(e -&gt; SubscriptionVO.builder()</span>
+<span class="nc" id="L121">                        .id(e.getId())</span>
+<span class="nc" id="L122">                        .email(e.getEmail())</span>
+<span class="nc" id="L123">                        .status(e.getStatus())</span>
+<span class="nc" id="L124">                        .createdAt(e.getCreatedAt())</span>
+<span class="nc" id="L125">                        .build())</span>
+<span class="nc" id="L126">                .collect(Collectors.toList());</span>
+<span class="nc" id="L127">        return PageResult.of(items, result.getTotal(), page, pageSize);</span>
+    }
+
+    public int sendNewsletter(String subject, String body) {
+<span class="nc" id="L131">        List&lt;SubscriptionEntity&gt; subs = subscriptionMapper.selectList(</span>
+                new LambdaQueryWrapper&lt;SubscriptionEntity&gt;()
+<span class="nc" id="L133">                        .eq(SubscriptionEntity::getStatus, &quot;confirmed&quot;));</span>
+<span class="nc" id="L134">        int success = 0;</span>
+<span class="nc bnc" id="L135" title="All 2 branches missed.">        for (SubscriptionEntity sub : subs) {</span>
+<span class="nc bnc" id="L136" title="All 2 branches missed.">            if (sendNewsletterEmail(sub.getEmail(), subject, body, sub.getUnsubscribeToken())) {</span>
+<span class="nc" id="L137">                success++;</span>
+            }
+<span class="nc" id="L139">        }</span>
+<span class="nc" id="L140">        return success;</span>
+    }
+
+    public void notifyNewArticle(String title, String slug, String summary) {
+<span class="nc" id="L144">        List&lt;SubscriptionEntity&gt; subs = subscriptionMapper.selectList(</span>
+                new LambdaQueryWrapper&lt;SubscriptionEntity&gt;()
+<span class="nc" id="L146">                        .eq(SubscriptionEntity::getStatus, &quot;confirmed&quot;));</span>
+<span class="nc bnc" id="L147" title="All 2 branches missed.">        if (subs.isEmpty()) {</span>
+<span class="nc" id="L148">            return;</span>
+        }
+<span class="nc" id="L150">        String url = siteUrl + &quot;/posts/&quot; + slug;</span>
+<span class="nc bnc" id="L151" title="All 2 branches missed.">        String body = siteTitle + &quot; 发布了新文章：《&quot; + title + &quot;》\n\n&quot;</span>
+                + (summary != null ? summary + &quot;\n\n&quot; : &quot;&quot;)
+                + &quot;阅读全文：&quot; + url + &quot;\n\n&quot;
+                + &quot;退订请访问邮件中的退订链接。&quot;;
+<span class="nc" id="L155">        int success = 0;</span>
+<span class="nc" id="L156">        int failed = 0;</span>
+<span class="nc bnc" id="L157" title="All 2 branches missed.">        for (SubscriptionEntity sub : subs) {</span>
+<span class="nc bnc" id="L158" title="All 2 branches missed.">            if (sendNewsletterEmail(sub.getEmail(), title, body, sub.getUnsubscribeToken())) {</span>
+<span class="nc" id="L159">                success++;</span>
+            } else {
+<span class="nc" id="L161">                failed++;</span>
+            }
+<span class="nc" id="L163">        }</span>
+<span class="nc bnc" id="L164" title="All 2 branches missed.">        if (failed &gt; 0) {</span>
+<span class="nc" id="L165">            log.warn(&quot;Newsletter 部分发送失败 slug={}: 成功 {}, 失败 {}&quot;, slug, success, failed);</span>
+        }
+<span class="nc" id="L167">    }</span>
+
+    private boolean sendNewsletterEmail(String email, String subject, String body, String unsubscribeToken) {
+<span class="nc" id="L170">        String unsubscribeLink = siteUrl + &quot;/subscribe/unsubscribe?token=&quot; + unsubscribeToken;</span>
+        try {
+<span class="nc" id="L172">            SimpleMailMessage msg = new SimpleMailMessage();</span>
+<span class="nc" id="L173">            msg.setTo(email);</span>
+<span class="nc" id="L174">            msg.setSubject(siteTitle + &quot; · &quot; + subject);</span>
+<span class="nc" id="L175">            msg.setText(body + &quot;\n\n退订：&quot; + unsubscribeLink);</span>
+<span class="nc" id="L176">            mailSender.send(msg);</span>
+<span class="nc" id="L177">            return true;</span>
+<span class="nc" id="L178">        } catch (Exception e) {</span>
+<span class="nc" id="L179">            log.warn(&quot;Newsletter 发送失败 {}: {}&quot;, email, e.getMessage());</span>
+<span class="nc" id="L180">            return false;</span>
+        }
+    }
+
+    private void sendConfirmEmail(String email, String token) {
+<span class="nc" id="L185">        String link = siteUrl + &quot;/subscribe/confirm?token=&quot; + token;</span>
+        try {
+<span class="nc" id="L187">            SimpleMailMessage msg = new SimpleMailMessage();</span>
+<span class="nc" id="L188">            msg.setTo(email);</span>
+<span class="nc" id="L189">            msg.setSubject(&quot;确认订阅渐构&quot;);</span>
+<span class="nc" id="L190">            msg.setText(&quot;请点击链接确认订阅：\n&quot; + link);</span>
+<span class="nc" id="L191">            mailSender.send(msg);</span>
+<span class="nc" id="L192">        } catch (Exception e) {</span>
+<span class="nc" id="L193">            log.warn(&quot;邮件发送失败: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L194">            throw new ValidationException(&quot;邮件发送失败，请稍后重试&quot;);</span>
+<span class="nc" id="L195">        }</span>
+<span class="nc" id="L196">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

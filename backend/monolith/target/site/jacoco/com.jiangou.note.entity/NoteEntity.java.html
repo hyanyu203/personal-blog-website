@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>NoteEntity.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.note.entity</a> &gt; <span class="el_source">NoteEntity.java</span></div><h1>NoteEntity.java</h1><pre class="source lang-java linenums">package com.jiangou.note.entity;
+
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+<span class="pc bnc" id="L10" title="All 110 branches missed.">@Data</span>
+@TableName(&quot;notes&quot;)
+public class NoteEntity {
+
+    @TableId(type = IdType.AUTO)
+<span class="nc" id="L15">    private Long id;</span>
+<span class="nc" id="L16">    private Long authorId;</span>
+<span class="nc" id="L17">    private String contentMd;</span>
+<span class="nc" id="L18">    private String contentHtml;</span>
+<span class="nc" id="L19">    private String contentText;</span>
+<span class="nc" id="L20">    private String status;</span>
+<span class="nc" id="L21">    private String visibility;</span>
+<span class="nc" id="L22">    private LocalDateTime publishedAt;</span>
+<span class="fc" id="L23">    private Long likeCount;</span>
+<span class="nc" id="L24">    private String metadata;</span>
+<span class="nc" id="L25">    private LocalDateTime createdAt;</span>
+<span class="nc" id="L26">    private LocalDateTime updatedAt;</span>
+<span class="nc" id="L27">    private LocalDateTime deletedAt;</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

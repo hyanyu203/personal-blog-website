@@ -1,0 +1,50 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      routes:
+        # 迁移期：未拆分路径仍走 monolith
+        - id: monolith-fallback
+          uri: ${MONOLITH_URI:http://localhost:8080}
+          predicates:
+            - Path=/api/**
+
+        # 以下为拆分后路由（启用微服务时取消注释并关闭 fallback 或调整 order）
+        # - id: content-service
+        #   uri: http://localhost:8001
+        #   predicates:
+        #     - Path=/api/v1/articles/**,/api/v1/categories/**,/api/v1/tags/**,/api/v1/snippets/**,/api/v1/notes/**
+        # - id: user-service
+        #   uri: http://localhost:8002
+        #   predicates:
+        #     - Path=/api/v1/auth/**,/api/v1/admin/users/**
+        # - id: comment-service
+        #   uri: http://localhost:8003
+        #   predicates:
+        #     - Path=/api/v1/comments/**,/api/v1/friend-links/**
+        # - id: project-service
+        #   uri: http://localhost:8004
+        #   predicates:
+        #     - Path=/api/v1/projects/**
+        # - id: search-service
+        #   uri: http://localhost:8005
+        #   predicates:
+        #     - Path=/api/v1/search/**
+        # - id: notification-service
+        #   uri: http://localhost:8006
+        #   predicates:
+        #     - Path=/api/v1/subscriptions/**,/api/v1/rss/**
+        # - id: upload-service
+        #   uri: http://localhost:8007
+        #   predicates:
+        #     - Path=/api/v1/admin/attachments/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

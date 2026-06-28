@@ -1,0 +1,1 @@
+import{a as e}from"./entry.4d6996de.js";import{c}from"./article.api.a270a7da.js";function o(){return e("/articles/archives")}function n(t){return e(`/categories/${t}`)}function s(t){return e(`/tags/${t}`)}function f(t,r=1){return c(r,20,t,void 0,void 0)}function u(t,r=1){return c(r,20,void 0,t,void 0)}export{n as a,f as b,s as c,u as d,o as f};

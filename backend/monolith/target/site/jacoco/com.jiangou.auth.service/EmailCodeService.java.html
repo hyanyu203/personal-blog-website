@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EmailCodeService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.auth.service</a> &gt; <span class="el_source">EmailCodeService.java</span></div><h1>EmailCodeService.java</h1><pre class="source lang-java linenums">package com.jiangou.auth.service;
+
+import com.jiangou.common.constant.ErrorCodes;
+import com.jiangou.common.exception.BusinessException;
+import com.jiangou.config.AuthProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
+import org.springframework.util.StringUtils;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
+
+@Service
+public class EmailCodeService {
+
+<span class="nc" id="L29">    private static final Logger log = LoggerFactory.getLogger(EmailCodeService.class);</span>
+
+<span class="nc" id="L31">    private static final DefaultRedisScript&lt;Long&gt; VERIFY_AND_CONSUME_SCRIPT = new DefaultRedisScript&lt;Long&gt;();</span>
+
+    static {
+<span class="nc" id="L34">        VERIFY_AND_CONSUME_SCRIPT.setLocation(new ClassPathResource(&quot;redis/email_code_verify_and_consume.lua&quot;));</span>
+<span class="nc" id="L35">        VERIFY_AND_CONSUME_SCRIPT.setResultType(Long.class);</span>
+<span class="nc" id="L36">    }</span>
+
+<span class="nc" id="L38">    public enum Purpose {</span>
+<span class="nc" id="L39">        REGISTER(&quot;register&quot;),</span>
+<span class="nc" id="L40">        RESET_PASSWORD(&quot;reset&quot;);</span>
+
+        private final String code;
+
+<span class="nc" id="L44">        Purpose(String code) {</span>
+<span class="nc" id="L45">            this.code = code;</span>
+<span class="nc" id="L46">        }</span>
+
+        public String code() {
+<span class="nc" id="L49">            return code;</span>
+        }
+    }
+
+    private final StringRedisTemplate redisTemplate;
+    private final JavaMailSender mailSender;
+    private final AuthProperties authProperties;
+<span class="nc" id="L56">    private final SecureRandom random = new SecureRandom();</span>
+
+    @Value(&quot;${jiangou.site-title:渐构}&quot;)
+    private String siteTitle;
+
+    @Value(&quot;${spring.mail.username:}&quot;)
+    private String mailFrom;
+
+    public EmailCodeService(StringRedisTemplate redisTemplate, JavaMailSender mailSender,
+<span class="nc" id="L65">                            AuthProperties authProperties) {</span>
+<span class="nc" id="L66">        this.redisTemplate = redisTemplate;</span>
+<span class="nc" id="L67">        this.mailSender = mailSender;</span>
+<span class="nc" id="L68">        this.authProperties = authProperties;</span>
+<span class="nc" id="L69">    }</span>
+
+    public void sendCode(String email, Purpose purpose, String clientIp) {
+<span class="nc" id="L72">        String normalizedEmail = normalizeEmail(email);</span>
+<span class="nc" id="L73">        enforceRateLimit(normalizedEmail, purpose, clientIp);</span>
+
+<span class="nc" id="L75">        String code = randomNumericCode(6);</span>
+<span class="nc" id="L76">        String codeKey = codeKey(normalizedEmail, purpose);</span>
+<span class="nc" id="L77">        redisTemplate.opsForValue().set(</span>
+                codeKey,
+<span class="nc" id="L79">                hash(code),</span>
+<span class="nc" id="L80">                authProperties.getEmailCodeTtlSeconds(),</span>
+                TimeUnit.SECONDS);
+
+<span class="nc" id="L83">        markSent(normalizedEmail, purpose, clientIp);</span>
+
+<span class="nc" id="L85">        sendEmail(normalizedEmail, purpose, code);</span>
+<span class="nc" id="L86">    }</span>
+
+    /**
+     * Records send rate-limit state without delivering mail (anti-enumeration for reset-password).
+     */
+    public void recordSendAttempt(String email, Purpose purpose, String clientIp) {
+<span class="nc" id="L92">        String normalizedEmail = normalizeEmail(email);</span>
+<span class="nc" id="L93">        enforceRateLimit(normalizedEmail, purpose, clientIp);</span>
+<span class="nc" id="L94">        markSent(normalizedEmail, purpose, clientIp);</span>
+<span class="nc" id="L95">    }</span>
+
+    public void verifyAndConsume(String email, Purpose purpose, String code) {
+<span class="nc" id="L98">        String normalizedEmail = normalizeEmail(email);</span>
+<span class="nc" id="L99">        enforceVerifyAttemptLimit(normalizedEmail, purpose);</span>
+<span class="nc" id="L100">        String codeKey = codeKey(normalizedEmail, purpose);</span>
+<span class="nc" id="L101">        String attemptKey = verifyAttemptKey(normalizedEmail, purpose);</span>
+<span class="nc" id="L102">        Long consumed = redisTemplate.execute(</span>
+                VERIFY_AND_CONSUME_SCRIPT,
+<span class="nc" id="L104">                Arrays.asList(codeKey, attemptKey),</span>
+<span class="nc" id="L105">                hash(code.trim()));</span>
+<span class="nc bnc" id="L106" title="All 4 branches missed.">        if (consumed == null || consumed != 1L) {</span>
+<span class="nc" id="L107">            recordFailedVerifyAttempt(normalizedEmail, purpose);</span>
+<span class="nc" id="L108">            throw new BusinessException(ErrorCodes.INVALID_CODE, &quot;验证码错误或已过期&quot;);</span>
+        }
+<span class="nc" id="L110">    }</span>
+
+    private void markSent(String normalizedEmail, Purpose purpose, String clientIp) {
+<span class="nc" id="L113">        String sentKey = sentKey(normalizedEmail, purpose);</span>
+<span class="nc" id="L114">        redisTemplate.opsForValue().set(</span>
+                sentKey,
+                &quot;1&quot;,
+<span class="nc" id="L117">                authProperties.getEmailCodeSendIntervalSeconds(),</span>
+                TimeUnit.SECONDS);
+
+<span class="nc" id="L120">        incrementDailyCounter(&quot;email-code:daily:email:&quot; + normalizedEmail + &quot;:&quot; + today());</span>
+<span class="nc" id="L121">        incrementDailyCounter(&quot;email-code:daily:ip:&quot; + clientIp + &quot;:&quot; + today());</span>
+<span class="nc" id="L122">    }</span>
+
+    private void enforceVerifyAttemptLimit(String email, Purpose purpose) {
+<span class="nc bnc" id="L125" title="All 2 branches missed.">        if (count(verifyAttemptKey(email, purpose)) &gt;= authProperties.getEmailCodeVerifyMaxAttempts()) {</span>
+<span class="nc" id="L126">            throw new BusinessException(ErrorCodes.CODE_RATE_LIMIT, &quot;验证码尝试次数过多，请重新获取&quot;);</span>
+        }
+<span class="nc" id="L128">    }</span>
+
+    private void recordFailedVerifyAttempt(String email, Purpose purpose) {
+<span class="nc" id="L131">        String key = verifyAttemptKey(email, purpose);</span>
+<span class="nc" id="L132">        incrementCounter(key, authProperties.getEmailCodeVerifyAttemptWindowSeconds());</span>
+<span class="nc" id="L133">    }</span>
+
+    private String verifyAttemptKey(String email, Purpose purpose) {
+<span class="nc" id="L136">        return &quot;email-code:attempts:&quot; + purpose.code() + &quot;:&quot; + email;</span>
+    }
+
+    private void incrementCounter(String key, long windowSeconds) {
+<span class="nc" id="L140">        Long count = redisTemplate.opsForValue().increment(key);</span>
+<span class="nc bnc" id="L141" title="All 4 branches missed.">        if (count != null &amp;&amp; count == 1L) {</span>
+<span class="nc" id="L142">            redisTemplate.expire(key, windowSeconds, TimeUnit.SECONDS);</span>
+        }
+<span class="nc" id="L144">    }</span>
+
+    private void enforceRateLimit(String email, Purpose purpose, String clientIp) {
+<span class="nc bnc" id="L147" title="All 2 branches missed.">        if (Boolean.TRUE.equals(redisTemplate.hasKey(sentKey(email, purpose)))) {</span>
+<span class="nc" id="L148">            throw new BusinessException(ErrorCodes.CODE_RATE_LIMIT, &quot;发送过于频繁，请稍后再试&quot;);</span>
+        }
+<span class="nc" id="L150">        String emailDailyKey = &quot;email-code:daily:email:&quot; + email + &quot;:&quot; + today();</span>
+<span class="nc" id="L151">        String ipDailyKey = &quot;email-code:daily:ip:&quot; + clientIp + &quot;:&quot; + today();</span>
+<span class="nc bnc" id="L152" title="All 2 branches missed.">        if (count(emailDailyKey) &gt;= authProperties.getEmailCodeDailyLimitPerEmail()) {</span>
+<span class="nc" id="L153">            throw new BusinessException(ErrorCodes.CODE_RATE_LIMIT, &quot;今日发送次数已达上限&quot;);</span>
+        }
+<span class="nc bnc" id="L155" title="All 2 branches missed.">        if (count(ipDailyKey) &gt;= authProperties.getEmailCodeDailyLimitPerIp()) {</span>
+<span class="nc" id="L156">            throw new BusinessException(ErrorCodes.CODE_RATE_LIMIT, &quot;今日发送次数已达上限&quot;);</span>
+        }
+<span class="nc" id="L158">    }</span>
+
+    private void sendEmail(String email, Purpose purpose, String code) {
+<span class="nc" id="L161">        SimpleMailMessage message = new SimpleMailMessage();</span>
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        if (StringUtils.hasText(mailFrom)) {</span>
+<span class="nc" id="L163">            message.setFrom(mailFrom);</span>
+        }
+<span class="nc" id="L165">        message.setTo(email);</span>
+<span class="nc bnc" id="L166" title="All 2 branches missed.">        if (purpose == Purpose.REGISTER) {</span>
+<span class="nc" id="L167">            message.setSubject(&quot;【&quot; + siteTitle + &quot;】注册验证码&quot;);</span>
+<span class="nc" id="L168">            message.setText(&quot;您的注册验证码为：&quot; + code + &quot;，&quot; + authProperties.getEmailCodeTtlSeconds() / 60</span>
+                    + &quot; 分钟内有效。如非本人操作请忽略。&quot;);
+        } else {
+<span class="nc" id="L171">            message.setSubject(&quot;【&quot; + siteTitle + &quot;】重置密码验证码&quot;);</span>
+<span class="nc" id="L172">            message.setText(&quot;您的重置密码验证码为：&quot; + code + &quot;，&quot; + authProperties.getEmailCodeTtlSeconds() / 60</span>
+                    + &quot; 分钟内有效。如非本人操作请忽略。&quot;);
+        }
+        try {
+<span class="nc" id="L176">            mailSender.send(message);</span>
+<span class="nc" id="L177">        } catch (Exception e) {</span>
+<span class="nc" id="L178">            log.warn(&quot;Failed to send email code to {}&quot;, email, e);</span>
+<span class="nc" id="L179">            throw new BusinessException(ErrorCodes.VALIDATION, &quot;邮件发送失败，请检查邮箱或稍后重试&quot;);</span>
+<span class="nc" id="L180">        }</span>
+<span class="nc" id="L181">    }</span>
+
+    private String normalizeEmail(String email) {
+<span class="nc" id="L184">        return email.trim().toLowerCase();</span>
+    }
+
+    private String codeKey(String email, Purpose purpose) {
+<span class="nc" id="L188">        return &quot;email-code:&quot; + purpose.code() + &quot;:&quot; + email;</span>
+    }
+
+    private String sentKey(String email, Purpose purpose) {
+<span class="nc" id="L192">        return &quot;email-code:sent:&quot; + purpose.code() + &quot;:&quot; + email;</span>
+    }
+
+    private String hash(String code) {
+<span class="nc" id="L196">        return sha256Hex(code.trim());</span>
+    }
+
+    private String sha256Hex(String value) {
+        try {
+<span class="nc" id="L201">            MessageDigest digest = MessageDigest.getInstance(&quot;SHA-256&quot;);</span>
+<span class="nc" id="L202">            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));</span>
+<span class="nc" id="L203">            StringBuilder sb = new StringBuilder(hash.length * 2);</span>
+<span class="nc bnc" id="L204" title="All 2 branches missed.">            for (byte b : hash) {</span>
+<span class="nc" id="L205">                sb.append(String.format(&quot;%02x&quot;, b));</span>
+            }
+<span class="nc" id="L207">            return sb.toString();</span>
+<span class="nc" id="L208">        } catch (NoSuchAlgorithmException e) {</span>
+<span class="nc" id="L209">            return DigestUtils.md5DigestAsHex(value.getBytes(StandardCharsets.UTF_8));</span>
+        }
+    }
+
+    private String randomNumericCode(int length) {
+<span class="nc" id="L214">        StringBuilder sb = new StringBuilder(length);</span>
+<span class="nc bnc" id="L215" title="All 2 branches missed.">        for (int i = 0; i &lt; length; i++) {</span>
+<span class="nc" id="L216">            sb.append(random.nextInt(10));</span>
+        }
+<span class="nc" id="L218">        return sb.toString();</span>
+    }
+
+    private void incrementDailyCounter(String key) {
+<span class="nc" id="L222">        Long count = redisTemplate.opsForValue().increment(key);</span>
+<span class="nc bnc" id="L223" title="All 4 branches missed.">        if (count != null &amp;&amp; count == 1L) {</span>
+<span class="nc" id="L224">            redisTemplate.expire(key, 1, TimeUnit.DAYS);</span>
+        }
+<span class="nc" id="L226">    }</span>
+
+    private int count(String key) {
+<span class="nc" id="L229">        String val = redisTemplate.opsForValue().get(key);</span>
+<span class="nc bnc" id="L230" title="All 2 branches missed.">        return val == null ? 0 : Integer.parseInt(val);</span>
+    }
+
+    private String today() {
+<span class="nc" id="L234">        return LocalDate.now().toString();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

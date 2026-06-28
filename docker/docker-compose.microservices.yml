@@ -1,0 +1,50 @@
+# 微服务阶段基础设施（规划）
+# 与 docker-compose.yml 叠加使用:
+#   docker compose -f docker-compose.yml -f docker-compose.microservices.yml up -d
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: jiangou-rabbitmq
+    restart: unless-stopped
+    profiles:
+      - microservices
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: jiangou-elasticsearch
+    restart: unless-stopped
+    profiles:
+      - microservices
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: jiangou-nacos
+    restart: unless-stopped
+    profiles:
+      - microservices
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+    ports:
+      - "8848:8848"
+    volumes:
+      - nacos_data:/home/nacos/data
+
+volumes:
+  rabbitmq_data:
+  es_data:
+  nacos_data:

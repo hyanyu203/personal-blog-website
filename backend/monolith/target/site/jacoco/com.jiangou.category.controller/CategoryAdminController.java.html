@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CategoryAdminController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.category.controller</a> &gt; <span class="el_source">CategoryAdminController.java</span></div><h1>CategoryAdminController.java</h1><pre class="source lang-java linenums">package com.jiangou.category.controller;
+
+import com.jiangou.category.dto.CategoryDTO;
+import com.jiangou.category.service.CategoryService;
+import com.jiangou.category.vo.CategoryVO;
+import com.jiangou.common.result.ApiResult;
+import com.jiangou.security.AdminPermissions;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.validation.Valid;
+import java.util.List;
+
+@Tag(name = &quot;Admin Categories&quot;)
+@RestController
+@RequestMapping(&quot;/api/v1/admin/categories&quot;)
+@PreAuthorize(AdminPermissions.ADMIN_ONLY)
+public class CategoryAdminController {
+
+    private final CategoryService categoryService;
+
+<span class="nc" id="L30">    public CategoryAdminController(CategoryService categoryService) {</span>
+<span class="nc" id="L31">        this.categoryService = categoryService;</span>
+<span class="nc" id="L32">    }</span>
+
+    @GetMapping
+    @PreAuthorize(AdminPermissions.ARTICLE_READ)
+    public ApiResult&lt;List&lt;CategoryVO&gt;&gt; list() {
+<span class="nc" id="L37">        return ApiResult.ok(categoryService.listAll());</span>
+    }
+
+    @PostMapping
+    @PreAuthorize(AdminPermissions.ADMIN_ONLY)
+    public ApiResult&lt;CategoryVO&gt; create(@Valid @RequestBody CategoryDTO dto) {
+<span class="nc" id="L43">        return ApiResult.ok(categoryService.create(dto));</span>
+    }
+
+    @PatchMapping(&quot;/{id}&quot;)
+    @PreAuthorize(AdminPermissions.ADMIN_ONLY)
+    public ApiResult&lt;CategoryVO&gt; update(@PathVariable Long id, @RequestBody CategoryDTO dto) {
+<span class="nc" id="L49">        return ApiResult.ok(categoryService.update(id, dto));</span>
+    }
+
+    @DeleteMapping(&quot;/{id}&quot;)
+    @PreAuthorize(AdminPermissions.ADMIN_ONLY)
+    public ApiResult&lt;Void&gt; delete(@PathVariable Long id) {
+<span class="nc" id="L55">        categoryService.delete(id);</span>
+<span class="nc" id="L56">        return ApiResult.ok();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

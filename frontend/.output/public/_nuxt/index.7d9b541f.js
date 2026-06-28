@@ -1,0 +1,1 @@
+import{V as s}from"./entry.4d6996de.js";import{u}from"./vue.-sixQ7xP.26eb4878.js";function i(e,a){const{title:r,titleTemplate:o,...m}=e;return u({title:r,titleTemplate:o,_flatMeta:m},{...a,transform(t){const n=s({...t._flatMeta});return delete t._flatMeta,{...t,meta:n}}})}export{i as u};

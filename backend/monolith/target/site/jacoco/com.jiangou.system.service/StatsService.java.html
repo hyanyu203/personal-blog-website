@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>StatsService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.system.service</a> &gt; <span class="el_source">StatsService.java</span></div><h1>StatsService.java</h1><pre class="source lang-java linenums">package com.jiangou.system.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.jiangou.article.entity.ArticleEntity;
+import com.jiangou.article.mapper.ArticleMapper;
+import com.jiangou.comment.entity.CommentEntity;
+import com.jiangou.comment.mapper.CommentMapper;
+import com.jiangou.note.entity.NoteEntity;
+import com.jiangou.note.mapper.NoteMapper;
+import com.jiangou.snippet.entity.SnippetEntity;
+import com.jiangou.snippet.mapper.SnippetMapper;
+import com.jiangou.subscription.entity.SubscriptionEntity;
+import com.jiangou.subscription.mapper.SubscriptionMapper;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+public class StatsService {
+
+    private final ArticleMapper articleMapper;
+    private final CommentMapper commentMapper;
+    private final SnippetMapper snippetMapper;
+    private final NoteMapper noteMapper;
+    private final SubscriptionMapper subscriptionMapper;
+    private final SystemSettingService systemSettingService;
+
+    public StatsService(ArticleMapper articleMapper, CommentMapper commentMapper,
+                        SnippetMapper snippetMapper, NoteMapper noteMapper,
+                        SubscriptionMapper subscriptionMapper,
+<span class="nc" id="L34">                        SystemSettingService systemSettingService) {</span>
+<span class="nc" id="L35">        this.articleMapper = articleMapper;</span>
+<span class="nc" id="L36">        this.commentMapper = commentMapper;</span>
+<span class="nc" id="L37">        this.snippetMapper = snippetMapper;</span>
+<span class="nc" id="L38">        this.noteMapper = noteMapper;</span>
+<span class="nc" id="L39">        this.subscriptionMapper = subscriptionMapper;</span>
+<span class="nc" id="L40">        this.systemSettingService = systemSettingService;</span>
+<span class="nc" id="L41">    }</span>
+
+    public Map&lt;String, Object&gt; publicStats() {
+<span class="nc" id="L44">        Map&lt;String, Object&gt; stats = new HashMap&lt;String, Object&gt;();</span>
+<span class="nc" id="L45">        stats.put(&quot;articleCount&quot;, countPublishedArticles());</span>
+<span class="nc" id="L46">        stats.put(&quot;snippetCount&quot;, countPublicSnippets());</span>
+<span class="nc" id="L47">        stats.put(&quot;noteCount&quot;, countPublishedNotes());</span>
+<span class="nc" id="L48">        stats.put(&quot;runningDays&quot;, computeRunningDays());</span>
+<span class="nc" id="L49">        return stats;</span>
+    }
+
+    public Map&lt;String, Object&gt; adminStats() {
+<span class="nc" id="L53">        Map&lt;String, Object&gt; stats = new HashMap&lt;String, Object&gt;();</span>
+<span class="nc" id="L54">        stats.put(&quot;articleCount&quot;, countPublishedArticles());</span>
+<span class="nc" id="L55">        stats.put(&quot;draftCount&quot;, articleMapper.selectCount(new LambdaQueryWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L56">                .eq(ArticleEntity::getStatus, &quot;draft&quot;)</span>
+<span class="nc" id="L57">                .isNull(ArticleEntity::getDeletedAt)));</span>
+<span class="nc" id="L58">        stats.put(&quot;pendingComments&quot;, commentMapper.selectCount(new LambdaQueryWrapper&lt;CommentEntity&gt;()</span>
+<span class="nc" id="L59">                .eq(CommentEntity::getStatus, &quot;pending&quot;)</span>
+<span class="nc" id="L60">                .isNull(CommentEntity::getDeletedAt)));</span>
+<span class="nc" id="L61">        stats.put(&quot;subscriberCount&quot;, subscriptionMapper.selectCount(</span>
+                new LambdaQueryWrapper&lt;SubscriptionEntity&gt;()
+<span class="nc" id="L63">                        .eq(SubscriptionEntity::getStatus, &quot;confirmed&quot;)));</span>
+<span class="nc" id="L64">        stats.put(&quot;snippetCount&quot;, snippetMapper.selectCount(new LambdaQueryWrapper&lt;SnippetEntity&gt;()</span>
+<span class="nc" id="L65">                .isNull(SnippetEntity::getDeletedAt)));</span>
+<span class="nc" id="L66">        stats.put(&quot;noteCount&quot;, noteMapper.selectCount(new LambdaQueryWrapper&lt;NoteEntity&gt;()</span>
+<span class="nc" id="L67">                .isNull(NoteEntity::getDeletedAt)));</span>
+<span class="nc" id="L68">        stats.put(&quot;runningDays&quot;, computeRunningDays());</span>
+<span class="nc" id="L69">        return stats;</span>
+    }
+
+    private long countPublishedArticles() {
+<span class="nc" id="L73">        return articleMapper.selectCount(new LambdaQueryWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L74">                .eq(ArticleEntity::getStatus, &quot;published&quot;)</span>
+<span class="nc" id="L75">                .eq(ArticleEntity::getVisibility, &quot;public&quot;)</span>
+<span class="nc" id="L76">                .isNull(ArticleEntity::getDeletedAt));</span>
+    }
+
+    private long countPublicSnippets() {
+<span class="nc" id="L80">        return snippetMapper.selectCount(new LambdaQueryWrapper&lt;SnippetEntity&gt;()</span>
+<span class="nc" id="L81">                .eq(SnippetEntity::getVisibility, &quot;public&quot;)</span>
+<span class="nc" id="L82">                .isNull(SnippetEntity::getDeletedAt));</span>
+    }
+
+    private long countPublishedNotes() {
+<span class="nc" id="L86">        return noteMapper.selectCount(new LambdaQueryWrapper&lt;NoteEntity&gt;()</span>
+<span class="nc" id="L87">                .eq(NoteEntity::getStatus, &quot;published&quot;)</span>
+<span class="nc" id="L88">                .eq(NoteEntity::getVisibility, &quot;public&quot;)</span>
+<span class="nc" id="L89">                .isNull(NoteEntity::getDeletedAt));</span>
+    }
+
+    private long computeRunningDays() {
+<span class="nc" id="L93">        Map&lt;String, Object&gt; settings = systemSettingService.getPublicSettings();</span>
+<span class="nc" id="L94">        Object launch = settings.get(&quot;siteLaunchDate&quot;);</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">        if (launch == null) {</span>
+<span class="nc" id="L96">            return 1L;</span>
+        }
+        try {
+<span class="nc" id="L99">            LocalDate launchDate = LocalDate.parse(launch.toString());</span>
+<span class="nc" id="L100">            return Math.max(1L, ChronoUnit.DAYS.between(launchDate, LocalDate.now()) + 1);</span>
+<span class="nc" id="L101">        } catch (Exception e) {</span>
+<span class="nc" id="L102">            return 1L;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

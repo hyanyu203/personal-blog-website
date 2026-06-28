@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MinioConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.config</a> &gt; <span class="el_source">MinioConfig.java</span></div><h1>MinioConfig.java</h1><pre class="source lang-java linenums">package com.jiangou.config;
+
+import io.minio.BucketExistsArgs;
+import io.minio.MakeBucketArgs;
+import io.minio.MinioClient;
+import lombok.Data;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+<span class="nc" id="L14">public class MinioConfig {</span>
+
+<span class="nc" id="L16">    private static final Logger log = LoggerFactory.getLogger(MinioConfig.class);</span>
+
+    @Bean
+    @ConfigurationProperties(prefix = &quot;jiangou.minio&quot;)
+    public MinioProperties minioProperties() {
+<span class="nc" id="L21">        return new MinioProperties();</span>
+    }
+
+    @Bean
+    public MinioClient minioClient(MinioProperties props) {
+        try {
+<span class="nc" id="L27">            MinioClient client = MinioClient.builder()</span>
+<span class="nc" id="L28">                    .endpoint(props.getEndpoint())</span>
+<span class="nc" id="L29">                    .credentials(props.getAccessKey(), props.getSecretKey())</span>
+<span class="nc" id="L30">                    .build();</span>
+<span class="nc" id="L31">            ensureBucket(client, props.getBucket());</span>
+<span class="nc" id="L32">            return client;</span>
+<span class="nc" id="L33">        } catch (Exception e) {</span>
+<span class="nc" id="L34">            log.warn(&quot;MinIO unavailable, media upload disabled until docker compose is up: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L35">            return null;</span>
+        }
+    }
+
+    private void ensureBucket(MinioClient client, String bucket) throws Exception {
+<span class="nc bnc" id="L40" title="All 2 branches missed.">        if (!client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {</span>
+<span class="nc" id="L41">            client.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());</span>
+<span class="nc" id="L42">            log.info(&quot;Created MinIO bucket: {}&quot;, bucket);</span>
+        }
+<span class="nc" id="L44">    }</span>
+
+<span class="nc bnc" id="L46" title="All 46 branches missed.">    @Data</span>
+    public static class MinioProperties {
+<span class="nc" id="L48">        private String endpoint;</span>
+<span class="nc" id="L49">        private String publicEndpoint;</span>
+<span class="nc" id="L50">        private String accessKey;</span>
+<span class="nc" id="L51">        private String secretKey;</span>
+<span class="nc" id="L52">        private String bucket;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

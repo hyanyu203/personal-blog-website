@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.auth.service</a> &gt; <span class="el_source">AuthService.java</span></div><h1>AuthService.java</h1><pre class="source lang-java linenums">package com.jiangou.auth.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.jiangou.auth.dto.LoginDTO;
+import com.jiangou.auth.dto.RefreshDTO;
+import io.jsonwebtoken.Claims;
+import com.jiangou.auth.vo.AuthVO;
+import com.jiangou.common.exception.UnauthorizedException;
+import com.jiangou.config.JwtProperties;
+import com.jiangou.security.JwtTokenBlacklistService;
+import com.jiangou.security.JwtTokenProvider;
+import com.jiangou.user.entity.UserEntity;
+import com.jiangou.user.mapper.UserMapper;
+import com.jiangou.user.service.RoleService;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+public class AuthService {
+
+    private final UserMapper userMapper;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final JwtTokenBlacklistService tokenBlacklistService;
+    private final RoleService roleService;
+    private final JwtProperties jwtProperties;
+
+    public AuthService(UserMapper userMapper, PasswordEncoder passwordEncoder,
+                       JwtTokenProvider jwtTokenProvider, JwtTokenBlacklistService tokenBlacklistService,
+<span class="nc" id="L34">                       RoleService roleService, JwtProperties jwtProperties) {</span>
+<span class="nc" id="L35">        this.userMapper = userMapper;</span>
+<span class="nc" id="L36">        this.passwordEncoder = passwordEncoder;</span>
+<span class="nc" id="L37">        this.jwtTokenProvider = jwtTokenProvider;</span>
+<span class="nc" id="L38">        this.tokenBlacklistService = tokenBlacklistService;</span>
+<span class="nc" id="L39">        this.roleService = roleService;</span>
+<span class="nc" id="L40">        this.jwtProperties = jwtProperties;</span>
+<span class="nc" id="L41">    }</span>
+
+    @Transactional
+    public AuthVO login(LoginDTO dto) {
+<span class="nc" id="L45">        UserEntity user = findByUsername(dto.getUsername());</span>
+<span class="nc bnc" id="L46" title="All 4 branches missed.">        if (user == null || user.getPasswordHash() == null</span>
+<span class="nc bnc" id="L47" title="All 2 branches missed.">                || !passwordEncoder.matches(dto.getPassword(), user.getPasswordHash())) {</span>
+<span class="nc" id="L48">            throw new UnauthorizedException(&quot;用户名或密码错误&quot;);</span>
+        }
+<span class="nc bnc" id="L50" title="All 2 branches missed.">        if (passwordEncoder.upgradeEncoding(user.getPasswordHash())) {</span>
+<span class="nc" id="L51">            user.setPasswordHash(passwordEncoder.encode(dto.getPassword()));</span>
+        }
+<span class="nc" id="L53">        ensureActiveUser(user);</span>
+<span class="nc" id="L54">        ensureCanAuthenticate(user);</span>
+<span class="nc" id="L55">        user.setLastLoginAt(LocalDateTime.now());</span>
+<span class="nc" id="L56">        userMapper.updateById(user);</span>
+<span class="nc" id="L57">        return buildAuthForUser(user);</span>
+    }
+
+    public AuthVO refresh(RefreshDTO dto) {
+<span class="nc" id="L61">        String oldRefreshToken = dto.getRefreshToken();</span>
+<span class="nc" id="L62">        Claims claims = jwtTokenProvider.validateRefreshToken(oldRefreshToken);</span>
+<span class="nc" id="L63">        validateTokenVersion(claims);</span>
+<span class="nc" id="L64">        Long userId = Long.valueOf(claims.getSubject());</span>
+<span class="nc" id="L65">        UserEntity user = userMapper.selectById(userId);</span>
+<span class="nc" id="L66">        ensureActiveUser(user);</span>
+<span class="nc" id="L67">        ensureCanAuthenticate(user);</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">        if (!tokenBlacklistService.blacklistIfAbsent(oldRefreshToken, claims.getExpiration())) {</span>
+<span class="nc" id="L69">            throw new UnauthorizedException(&quot;refresh token 已失效&quot;);</span>
+        }
+<span class="nc" id="L71">        return buildAuthForUser(user);</span>
+    }
+
+    public AuthVO.UserBriefVO me(Long userId) {
+<span class="nc" id="L75">        UserEntity user = userMapper.selectById(userId);</span>
+<span class="nc" id="L76">        ensureActiveUser(user);</span>
+<span class="nc" id="L77">        return toUserBrief(user);</span>
+    }
+
+    public AuthVO buildAuthForUser(UserEntity user) {
+<span class="nc bnc" id="L81" title="All 2 branches missed.">        int tokenVersion = user.getTokenVersion() == null ? 0 : user.getTokenVersion();</span>
+<span class="nc" id="L82">        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getUsername(), tokenVersion);</span>
+<span class="nc" id="L83">        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), user.getUsername(), tokenVersion);</span>
+<span class="nc" id="L84">        long expiresInSec = jwtProperties.getAccessTokenExpirationMs() / 1000L;</span>
+<span class="nc" id="L85">        return AuthVO.builder()</span>
+<span class="nc" id="L86">                .accessToken(accessToken)</span>
+<span class="nc" id="L87">                .refreshToken(refreshToken)</span>
+<span class="nc" id="L88">                .expiresIn(expiresInSec)</span>
+<span class="nc" id="L89">                .user(toUserBrief(user))</span>
+<span class="nc" id="L90">                .build();</span>
+    }
+
+    public void ensureActiveAdmin(UserEntity user) {
+<span class="nc" id="L94">        ensureActiveUser(user);</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">        if (!roleService.hasRole(user.getId(), &quot;ADMIN&quot;)) {</span>
+<span class="nc" id="L96">            throw new UnauthorizedException(&quot;无后台访问权限&quot;);</span>
+        }
+<span class="nc" id="L98">    }</span>
+
+    private UserEntity findByUsername(String username) {
+<span class="nc" id="L101">        return userMapper.selectOne(new LambdaQueryWrapper&lt;UserEntity&gt;()</span>
+<span class="nc" id="L102">                .eq(UserEntity::getUsername, username)</span>
+<span class="nc" id="L103">                .isNull(UserEntity::getDeletedAt));</span>
+    }
+
+    private void ensureCanAuthenticate(UserEntity user) {
+<span class="nc" id="L107">        List&lt;String&gt; roles = roleService.getRoleCodes(user.getId());</span>
+<span class="nc bnc" id="L108" title="All 6 branches missed.">        if (roles.stream().noneMatch(code -&gt; &quot;USER&quot;.equalsIgnoreCase(code) || &quot;ADMIN&quot;.equalsIgnoreCase(code))) {</span>
+<span class="nc" id="L109">            throw new UnauthorizedException(&quot;无登录权限&quot;);</span>
+        }
+<span class="nc" id="L111">    }</span>
+
+    private void validateTokenVersion(Claims claims) {
+<span class="nc" id="L114">        int claimVersion = 0;</span>
+<span class="nc" id="L115">        Object tv = claims.get(&quot;tv&quot;);</span>
+<span class="nc bnc" id="L116" title="All 2 branches missed.">        if (tv instanceof Number) {</span>
+<span class="nc" id="L117">            claimVersion = ((Number) tv).intValue();</span>
+        }
+<span class="nc" id="L119">        Long userId = Long.valueOf(claims.getSubject());</span>
+<span class="nc" id="L120">        UserEntity user = userMapper.selectById(userId);</span>
+<span class="nc bnc" id="L121" title="All 4 branches missed.">        int userVersion = user == null || user.getTokenVersion() == null ? 0 : user.getTokenVersion();</span>
+<span class="nc bnc" id="L122" title="All 2 branches missed.">        if (claimVersion != userVersion) {</span>
+<span class="nc" id="L123">            throw new UnauthorizedException(&quot;token 已失效，请重新登录&quot;);</span>
+        }
+<span class="nc" id="L125">    }</span>
+
+    private void ensureActiveUser(UserEntity user) {
+<span class="nc bnc" id="L128" title="All 4 branches missed.">        if (user == null || user.getDeletedAt() != null) {</span>
+<span class="nc" id="L129">            throw new UnauthorizedException(&quot;用户不存在&quot;);</span>
+        }
+<span class="nc bnc" id="L131" title="All 2 branches missed.">        if (!&quot;active&quot;.equals(user.getStatus())) {</span>
+<span class="nc" id="L132">            throw new UnauthorizedException(&quot;账号已禁用&quot;);</span>
+        }
+<span class="nc" id="L134">    }</span>
+
+    private AuthVO.UserBriefVO toUserBrief(UserEntity user) {
+<span class="nc" id="L137">        return AuthVO.UserBriefVO.builder()</span>
+<span class="nc" id="L138">                .id(user.getId())</span>
+<span class="nc" id="L139">                .username(user.getUsername())</span>
+<span class="nc" id="L140">                .displayName(user.getDisplayName())</span>
+<span class="nc" id="L141">                .roles(roleService.getRoleCodes(user.getId()))</span>
+<span class="nc" id="L142">                .permissions(roleService.getPermissionCodes(user.getId()))</span>
+<span class="nc" id="L143">                .build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

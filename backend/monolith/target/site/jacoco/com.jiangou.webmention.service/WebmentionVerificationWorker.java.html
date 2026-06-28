@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WebmentionVerificationWorker.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.webmention.service</a> &gt; <span class="el_source">WebmentionVerificationWorker.java</span></div><h1>WebmentionVerificationWorker.java</h1><pre class="source lang-java linenums">package com.jiangou.webmention.service;
+
+import com.jiangou.common.util.UrlSafetyUtils;
+import com.jiangou.webmention.entity.WebmentionEntity;
+import com.jiangou.webmention.mapper.WebmentionMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+
+@Service
+public class WebmentionVerificationWorker {
+
+<span class="nc" id="L20">    private static final Logger log = LoggerFactory.getLogger(WebmentionVerificationWorker.class);</span>
+    private static final int CONNECT_TIMEOUT_MILLIS = 5000;
+    private static final int READ_TIMEOUT_MILLIS = 10000;
+    private static final int MAX_BODY_BYTES = 256 * 1024;
+
+    private final WebmentionMapper webmentionMapper;
+
+<span class="nc" id="L27">    public WebmentionVerificationWorker(WebmentionMapper webmentionMapper) {</span>
+<span class="nc" id="L28">        this.webmentionMapper = webmentionMapper;</span>
+<span class="nc" id="L29">    }</span>
+
+    @Async(&quot;webmentionExecutor&quot;)
+    public void verify(Long id, String source, String target) {
+        try {
+<span class="nc bnc" id="L34" title="All 2 branches missed.">            if (sourceContainsTarget(source, target)) {</span>
+<span class="nc" id="L35">                WebmentionEntity entity = webmentionMapper.selectById(id);</span>
+<span class="nc bnc" id="L36" title="All 4 branches missed.">                if (entity != null &amp;&amp; &quot;pending&quot;.equals(entity.getStatus())) {</span>
+<span class="nc" id="L37">                    entity.setStatus(&quot;verified&quot;);</span>
+<span class="nc" id="L38">                    entity.setVerifiedAt(LocalDateTime.now());</span>
+<span class="nc" id="L39">                    entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L40">                    webmentionMapper.updateById(entity);</span>
+                }
+            }
+<span class="nc" id="L43">        } catch (Exception e) {</span>
+<span class="nc" id="L44">            log.warn(&quot;Webmention 验证失败 id={}: {}&quot;, id, e.getMessage());</span>
+<span class="nc" id="L45">        }</span>
+<span class="nc" id="L46">    }</span>
+
+    private boolean sourceContainsTarget(String sourceUrl, String targetUrl) throws Exception {
+<span class="nc" id="L49">        HttpURLConnection conn = UrlSafetyUtils.openValidatedGetConnection(sourceUrl);</span>
+        try {
+<span class="nc" id="L51">            conn.setRequestMethod(&quot;GET&quot;);</span>
+<span class="nc" id="L52">            conn.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);</span>
+<span class="nc" id="L53">            conn.setReadTimeout(READ_TIMEOUT_MILLIS);</span>
+<span class="nc bnc" id="L54" title="All 2 branches missed.">            if (conn.getResponseCode() &gt;= 400) {</span>
+<span class="nc" id="L55">                return false;</span>
+            }
+<span class="nc" id="L57">            ByteArrayOutputStream body = new ByteArrayOutputStream();</span>
+<span class="nc" id="L58">            try (InputStream inputStream = conn.getInputStream()) {</span>
+<span class="nc" id="L59">                byte[] chunk = new byte[8192];</span>
+<span class="nc" id="L60">                int total = 0;</span>
+                int read;
+<span class="nc bnc" id="L62" title="All 2 branches missed.">                while ((read = inputStream.read(chunk)) != -1) {</span>
+<span class="nc" id="L63">                    int remaining = MAX_BODY_BYTES - total;</span>
+<span class="nc bnc" id="L64" title="All 2 branches missed.">                    if (remaining &lt;= 0) {</span>
+<span class="nc" id="L65">                        break;</span>
+                    }
+<span class="nc" id="L67">                    int toWrite = Math.min(read, remaining);</span>
+<span class="nc" id="L68">                    body.write(chunk, 0, toWrite);</span>
+<span class="nc" id="L69">                    total += toWrite;</span>
+<span class="nc bnc" id="L70" title="All 2 branches missed.">                    if (toWrite &lt; read) {</span>
+<span class="nc" id="L71">                        break;</span>
+                    }
+<span class="nc" id="L73">                }</span>
+            }
+<span class="nc" id="L75">            return new String(body.toByteArray(), StandardCharsets.UTF_8).contains(targetUrl);</span>
+        } finally {
+<span class="nc" id="L77">            conn.disconnect();</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

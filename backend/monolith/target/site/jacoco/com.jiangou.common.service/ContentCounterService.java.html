@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ContentCounterService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.common.service</a> &gt; <span class="el_source">ContentCounterService.java</span></div><h1>ContentCounterService.java</h1><pre class="source lang-java linenums">package com.jiangou.common.service;
+
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.jiangou.article.entity.ArticleEntity;
+import com.jiangou.article.entity.ArticleTagEntity;
+import com.jiangou.article.mapper.ArticleMapper;
+import com.jiangou.article.mapper.ArticleTagMapper;
+import com.jiangou.category.entity.CategoryEntity;
+import com.jiangou.category.mapper.CategoryMapper;
+import com.jiangou.comment.entity.CommentEntity;
+import com.jiangou.comment.mapper.CommentMapper;
+import com.jiangou.tag.entity.TagEntity;
+import com.jiangou.tag.mapper.TagMapper;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Service
+public class ContentCounterService {
+
+    private final ArticleMapper articleMapper;
+    private final CommentMapper commentMapper;
+    private final ArticleTagMapper articleTagMapper;
+    private final CategoryMapper categoryMapper;
+    private final TagMapper tagMapper;
+
+    public ContentCounterService(ArticleMapper articleMapper, CommentMapper commentMapper,
+                                 ArticleTagMapper articleTagMapper,
+                                 CategoryMapper categoryMapper,
+<span class="nc" id="L35">                                 TagMapper tagMapper) {</span>
+<span class="nc" id="L36">        this.articleMapper = articleMapper;</span>
+<span class="nc" id="L37">        this.commentMapper = commentMapper;</span>
+<span class="nc" id="L38">        this.articleTagMapper = articleTagMapper;</span>
+<span class="nc" id="L39">        this.categoryMapper = categoryMapper;</span>
+<span class="nc" id="L40">        this.tagMapper = tagMapper;</span>
+<span class="nc" id="L41">    }</span>
+
+    public long incrementArticleViewCount(ArticleEntity article) {
+<span class="nc bnc" id="L44" title="All 2 branches missed.">        long current = article.getViewCount() == null ? 0L : article.getViewCount();</span>
+<span class="nc" id="L45">        articleMapper.update(null, new LambdaUpdateWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L46">                .eq(ArticleEntity::getId, article.getId())</span>
+<span class="nc" id="L47">                .isNull(ArticleEntity::getDeletedAt)</span>
+<span class="nc" id="L48">                .setSql(&quot;view_count = COALESCE(view_count, 0) + 1&quot;));</span>
+<span class="nc" id="L49">        long next = current + 1;</span>
+<span class="nc" id="L50">        article.setViewCount(next);</span>
+<span class="nc" id="L51">        return next;</span>
+    }
+
+    public void adjustApprovedCommentCount(CommentEntity comment, int delta) {
+<span class="nc bnc" id="L55" title="All 4 branches missed.">        if (comment == null || delta == 0) {</span>
+<span class="nc" id="L56">            return;</span>
+        }
+<span class="nc bnc" id="L58" title="All 2 branches missed.">        if (comment.getParentId() == null) {</span>
+<span class="nc bnc" id="L59" title="All 2 branches missed.">            if (&quot;article&quot;.equals(comment.getTargetType())) {</span>
+<span class="nc" id="L60">                adjustArticleCommentCount(comment.getTargetId(), delta);</span>
+            }
+        } else {
+<span class="nc" id="L63">            adjustCommentReplyCount(comment.getParentId(), delta);</span>
+        }
+<span class="nc" id="L65">    }</span>
+
+    public void adjustPublishedArticleTaxonomyCounts(ArticleEntity article, int delta) {
+<span class="nc bnc" id="L68" title="All 6 branches missed.">        if (article == null || article.getId() == null || delta == 0) {</span>
+<span class="nc" id="L69">            return;</span>
+        }
+<span class="nc" id="L71">        adjustPublishedArticleTaxonomyCounts(article.getCategoryId(), loadArticleTagIds(article.getId()), delta);</span>
+<span class="nc" id="L72">    }</span>
+
+    public void adjustPublishedArticleTaxonomyCounts(Long categoryId, Collection&lt;Long&gt; tagIds, int delta) {
+<span class="nc bnc" id="L75" title="All 2 branches missed.">        if (delta == 0) {</span>
+<span class="nc" id="L76">            return;</span>
+        }
+<span class="nc" id="L78">        adjustCategoryPostCount(categoryId, delta);</span>
+<span class="nc" id="L79">        adjustTagUsageCounts(tagIds, delta);</span>
+<span class="nc" id="L80">    }</span>
+
+    public void movePublishedArticleCategory(Long oldCategoryId, Long newCategoryId) {
+<span class="nc bnc" id="L83" title="All 6 branches missed.">        if (oldCategoryId == null ? newCategoryId == null : oldCategoryId.equals(newCategoryId)) {</span>
+<span class="nc" id="L84">            return;</span>
+        }
+<span class="nc" id="L86">        adjustCategoryPostCount(oldCategoryId, -1);</span>
+<span class="nc" id="L87">        adjustCategoryPostCount(newCategoryId, 1);</span>
+<span class="nc" id="L88">    }</span>
+
+    public void syncPublishedArticleTags(List&lt;Long&gt; oldTagIds, List&lt;Long&gt; newTagIds) {
+<span class="nc" id="L91">        Set&lt;Long&gt; oldIds = uniqueIds(oldTagIds);</span>
+<span class="nc" id="L92">        Set&lt;Long&gt; newIds = uniqueIds(newTagIds);</span>
+
+<span class="nc" id="L94">        List&lt;Long&gt; removed = oldIds.stream()</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">                .filter(id -&gt; !newIds.contains(id))</span>
+<span class="nc" id="L96">                .collect(Collectors.toList());</span>
+<span class="nc" id="L97">        List&lt;Long&gt; added = newIds.stream()</span>
+<span class="nc bnc" id="L98" title="All 2 branches missed.">                .filter(id -&gt; !oldIds.contains(id))</span>
+<span class="nc" id="L99">                .collect(Collectors.toList());</span>
+
+<span class="nc" id="L101">        adjustTagUsageCounts(removed, -1);</span>
+<span class="nc" id="L102">        adjustTagUsageCounts(added, 1);</span>
+<span class="nc" id="L103">    }</span>
+
+    private void adjustArticleCommentCount(Long articleId, int delta) {
+<span class="nc bnc" id="L106" title="All 2 branches missed.">        if (articleId == null) {</span>
+<span class="nc" id="L107">            return;</span>
+        }
+<span class="nc" id="L109">        articleMapper.update(null, new LambdaUpdateWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L110">                .eq(ArticleEntity::getId, articleId)</span>
+<span class="nc" id="L111">                .isNull(ArticleEntity::getDeletedAt)</span>
+<span class="nc" id="L112">                .setSql(counterSql(&quot;comment_count&quot;, delta)));</span>
+<span class="nc" id="L113">    }</span>
+
+    private void adjustCommentReplyCount(Long commentId, int delta) {
+<span class="nc bnc" id="L116" title="All 2 branches missed.">        if (commentId == null) {</span>
+<span class="nc" id="L117">            return;</span>
+        }
+<span class="nc" id="L119">        commentMapper.update(null, new LambdaUpdateWrapper&lt;CommentEntity&gt;()</span>
+<span class="nc" id="L120">                .eq(CommentEntity::getId, commentId)</span>
+<span class="nc" id="L121">                .isNull(CommentEntity::getDeletedAt)</span>
+<span class="nc" id="L122">                .setSql(counterSql(&quot;reply_count&quot;, delta)));</span>
+<span class="nc" id="L123">    }</span>
+
+    private void adjustCategoryPostCount(Long categoryId, int delta) {
+<span class="nc bnc" id="L126" title="All 4 branches missed.">        if (categoryId == null || delta == 0) {</span>
+<span class="nc" id="L127">            return;</span>
+        }
+<span class="nc" id="L129">        categoryMapper.update(null, new LambdaUpdateWrapper&lt;CategoryEntity&gt;()</span>
+<span class="nc" id="L130">                .eq(CategoryEntity::getId, categoryId)</span>
+<span class="nc" id="L131">                .isNull(CategoryEntity::getDeletedAt)</span>
+<span class="nc" id="L132">                .setSql(counterSql(&quot;post_count&quot;, delta)));</span>
+<span class="nc" id="L133">    }</span>
+
+    private void adjustTagUsageCounts(Collection&lt;Long&gt; tagIds, int delta) {
+<span class="nc bnc" id="L136" title="All 6 branches missed.">        if (tagIds == null || tagIds.isEmpty() || delta == 0) {</span>
+<span class="nc" id="L137">            return;</span>
+        }
+<span class="nc bnc" id="L139" title="All 2 branches missed.">        for (Long tagId : uniqueIds(tagIds)) {</span>
+<span class="nc" id="L140">            tagMapper.update(null, new LambdaUpdateWrapper&lt;TagEntity&gt;()</span>
+<span class="nc" id="L141">                    .eq(TagEntity::getId, tagId)</span>
+<span class="nc" id="L142">                    .isNull(TagEntity::getDeletedAt)</span>
+<span class="nc" id="L143">                    .setSql(counterSql(&quot;usage_count&quot;, delta)));</span>
+<span class="nc" id="L144">        }</span>
+<span class="nc" id="L145">    }</span>
+
+    private List&lt;Long&gt; loadArticleTagIds(Long articleId) {
+<span class="nc bnc" id="L148" title="All 2 branches missed.">        if (articleId == null) {</span>
+<span class="nc" id="L149">            return new ArrayList&lt;Long&gt;();</span>
+        }
+<span class="nc" id="L151">        return articleTagMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper&lt;ArticleTagEntity&gt;()</span>
+<span class="nc" id="L152">                        .eq(ArticleTagEntity::getArticleId, articleId))</span>
+<span class="nc" id="L153">                .stream()</span>
+<span class="nc" id="L154">                .map(ArticleTagEntity::getTagId)</span>
+<span class="nc" id="L155">                .collect(Collectors.toList());</span>
+    }
+
+    private Set&lt;Long&gt; uniqueIds(Collection&lt;Long&gt; ids) {
+<span class="nc" id="L159">        Set&lt;Long&gt; result = new LinkedHashSet&lt;Long&gt;();</span>
+<span class="nc bnc" id="L160" title="All 2 branches missed.">        if (ids == null) {</span>
+<span class="nc" id="L161">            return result;</span>
+        }
+<span class="nc bnc" id="L163" title="All 2 branches missed.">        for (Long id : ids) {</span>
+<span class="nc bnc" id="L164" title="All 4 branches missed.">            if (id != null &amp;&amp; id &gt; 0) {</span>
+<span class="nc" id="L165">                result.add(id);</span>
+            }
+<span class="nc" id="L167">        }</span>
+<span class="nc" id="L168">        return result;</span>
+    }
+
+    private String counterSql(String column, int delta) {
+<span class="nc bnc" id="L172" title="All 2 branches missed.">        if (delta &gt; 0) {</span>
+<span class="nc" id="L173">            return column + &quot; = COALESCE(&quot; + column + &quot;, 0) + &quot; + delta;</span>
+        }
+<span class="nc" id="L175">        return column + &quot; = GREATEST(COALESCE(&quot; + column + &quot;, 0) - &quot; + Math.abs(delta) + &quot;, 0)&quot;;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

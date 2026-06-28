@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GlobalExceptionHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.common.exception</a> &gt; <span class="el_source">GlobalExceptionHandler.java</span></div><h1>GlobalExceptionHandler.java</h1><pre class="source lang-java linenums">package com.jiangou.common.exception;
+
+import com.jiangou.common.constant.ErrorCodes;
+import com.jiangou.common.result.ApiResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+<span class="fc" id="L16">public class GlobalExceptionHandler {</span>
+
+<span class="fc" id="L18">    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);</span>
+
+    @ExceptionHandler(BusinessException.class)
+    public org.springframework.http.ResponseEntity&lt;ApiResult&lt;Void&gt;&gt; handleBusiness(BusinessException e) {
+<span class="nc bnc" id="L22" title="All 2 branches missed.">        if (e.getCode() != ErrorCodes.RATE_LIMIT) {</span>
+<span class="nc" id="L23">            log.warn(&quot;Business error code={} message={}&quot;, e.getCode(), e.getMessage());</span>
+        }
+<span class="nc" id="L25">        HttpStatus status = mapBusinessCodeToStatus(e.getCode());</span>
+<span class="nc" id="L26">        return org.springframework.http.ResponseEntity.status(status)</span>
+<span class="nc" id="L27">                .body(ApiResult.fail(e.getCode(), e.getMessage()));</span>
+    }
+
+    private HttpStatus mapBusinessCodeToStatus(int code) {
+<span class="nc bnc" id="L31" title="All 9 branches missed.">        switch (code) {</span>
+            case ErrorCodes.UNAUTHORIZED:
+<span class="nc" id="L33">                return HttpStatus.UNAUTHORIZED;</span>
+            case ErrorCodes.INVALID_CODE:
+            case ErrorCodes.INVALID_CAPTCHA:
+<span class="nc" id="L36">                return HttpStatus.UNPROCESSABLE_ENTITY;</span>
+            case ErrorCodes.CODE_RATE_LIMIT:
+<span class="nc" id="L38">                return HttpStatus.TOO_MANY_REQUESTS;</span>
+            case ErrorCodes.FORBIDDEN:
+<span class="nc" id="L40">                return HttpStatus.FORBIDDEN;</span>
+            case ErrorCodes.NOT_FOUND:
+<span class="nc" id="L42">                return HttpStatus.NOT_FOUND;</span>
+            case ErrorCodes.CONFLICT:
+<span class="nc" id="L44">                return HttpStatus.CONFLICT;</span>
+            case ErrorCodes.VALIDATION:
+            case ErrorCodes.WEAK_PASSWORD:
+<span class="nc" id="L47">                return HttpStatus.UNPROCESSABLE_ENTITY;</span>
+            case ErrorCodes.RATE_LIMIT:
+<span class="nc" id="L49">                return HttpStatus.TOO_MANY_REQUESTS;</span>
+            default:
+<span class="nc" id="L51">                return HttpStatus.BAD_REQUEST;</span>
+        }
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResult&lt;Void&gt; handleDataIntegrity(DataIntegrityViolationException e) {
+<span class="nc" id="L58">        log.warn(&quot;Data integrity violation: {}&quot;, e.getMostSpecificCause().getMessage());</span>
+<span class="nc" id="L59">        return ApiResult.fail(ErrorCodes.CONFLICT, &quot;数据冲突，请检查是否重复&quot;);</span>
+    }
+
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResult&lt;Void&gt; handleValidation(Exception e) {
+<span class="nc" id="L65">        String message = &quot;参数校验失败&quot;;</span>
+<span class="nc bnc" id="L66" title="All 2 branches missed.">        if (e instanceof MethodArgumentNotValidException) {</span>
+<span class="nc" id="L67">            MethodArgumentNotValidException ex = (MethodArgumentNotValidException) e;</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">            if (ex.getBindingResult().getFieldError() != null) {</span>
+<span class="nc" id="L69">                message = ex.getBindingResult().getFieldError().getDefaultMessage();</span>
+            }
+        }
+<span class="nc" id="L72">        return ApiResult.fail(ErrorCodes.VALIDATION, message);</span>
+    }
+
+    @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ApiResult&lt;Void&gt; handleUnknown(Exception e) {
+<span class="nc" id="L78">        log.error(&quot;Unhandled exception&quot;, e);</span>
+<span class="nc" id="L79">        return ApiResult.fail(50000, &quot;服务器内部错误&quot;);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

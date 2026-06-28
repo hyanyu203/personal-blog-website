@@ -1,0 +1,1 @@
+import{D as a}from"./index-d3b923e4.js";function r(){return a.get("/admin/tags")}function s(t){return a.post("/admin/tags",t)}function u(t,e){return a.patch(`/admin/tags/${t}`,e)}function g(t){return a.delete(`/admin/tags/${t}`)}export{s as c,g as d,r as f,u};

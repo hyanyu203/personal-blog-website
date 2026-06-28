@@ -1,0 +1,5 @@
+const main = ':root,:root[data-theme=light]{--color-bg:#faf7f0;--color-text:#24211d;--color-muted:#7a746b;--color-border:#e7dfd2;--color-accent:#7b5f3a;--font-serif:"Noto Serif SC","Source Han Serif SC",serif;--font-sans:"Inter","Noto Sans SC",system-ui,sans-serif;--font-mono:"JetBrains Mono","Fira Code",monospace}:root[data-theme=dark]{--color-bg:#1a1814;--color-text:#e8e2d9;--color-muted:#9a948a;--color-border:#3d3830;--color-accent:#c4a574}@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--color-bg:#1a1814;--color-text:#e8e2d9;--color-muted:#9a948a;--color-border:#3d3830;--color-accent:#c4a574}}*{box-sizing:border-box}body{background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans);line-height:1.7;margin:0}a{color:var(--color-accent);text-decoration:none}a:hover{text-decoration:underline}h1,h2,h3{font-family:var(--font-serif);font-weight:600}code,pre{font-family:var(--font-mono)}.article-content :deep(pre){background:var(--color-border);border-radius:6px;overflow-x:auto;padding:1rem}.article-content :deep(code){font-size:.9em}';
+export {
+  main as default
+};
+//# sourceMappingURL=css-styles-1.mjs-5e73173a.js.map

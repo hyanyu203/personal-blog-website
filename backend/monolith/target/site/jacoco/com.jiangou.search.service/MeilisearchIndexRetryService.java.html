@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MeilisearchIndexRetryService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.search.service</a> &gt; <span class="el_source">MeilisearchIndexRetryService.java</span></div><h1>MeilisearchIndexRetryService.java</h1><pre class="source lang-java linenums">package com.jiangou.search.service;
+
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import java.util.Collections;
+import java.util.Set;
+
+@Service
+public class MeilisearchIndexRetryService {
+
+    private static final String FAILED_SET = &quot;meilisearch:sync:failed&quot;;
+    private static final String FULL_REBUILD_KEY = &quot;__full_rebuild__&quot;;
+
+    private final StringRedisTemplate redisTemplate;
+
+<span class="nc" id="L17">    public MeilisearchIndexRetryService(StringRedisTemplate redisTemplate) {</span>
+<span class="nc" id="L18">        this.redisTemplate = redisTemplate;</span>
+<span class="nc" id="L19">    }</span>
+
+    public void markFailed(String targetType, Long targetId) {
+<span class="nc bnc" id="L22" title="All 4 branches missed.">        if (targetType == null || targetId == null) {</span>
+<span class="nc" id="L23">            return;</span>
+        }
+<span class="nc" id="L25">        redisTemplate.opsForSet().add(FAILED_SET, key(targetType, targetId));</span>
+<span class="nc" id="L26">    }</span>
+
+    public void clearFailed(String targetType, Long targetId) {
+<span class="nc bnc" id="L29" title="All 4 branches missed.">        if (targetType == null || targetId == null) {</span>
+<span class="nc" id="L30">            return;</span>
+        }
+<span class="nc" id="L32">        redisTemplate.opsForSet().remove(FAILED_SET, key(targetType, targetId));</span>
+<span class="nc" id="L33">    }</span>
+
+    public void markFullRebuildFailed() {
+<span class="nc" id="L36">        redisTemplate.opsForSet().add(FAILED_SET, FULL_REBUILD_KEY);</span>
+<span class="nc" id="L37">    }</span>
+
+    public void clearFullRebuildFailed() {
+<span class="nc" id="L40">        redisTemplate.opsForSet().remove(FAILED_SET, FULL_REBUILD_KEY);</span>
+<span class="nc" id="L41">    }</span>
+
+    public Set&lt;String&gt; pollFailedKeys() {
+<span class="nc" id="L44">        Set&lt;String&gt; members = redisTemplate.opsForSet().members(FAILED_SET);</span>
+<span class="nc bnc" id="L45" title="All 4 branches missed.">        if (members == null || members.isEmpty()) {</span>
+<span class="nc" id="L46">            return Collections.emptySet();</span>
+        }
+<span class="nc" id="L48">        return members;</span>
+    }
+
+    public boolean isFullRebuildKey(String key) {
+<span class="nc" id="L52">        return FULL_REBUILD_KEY.equals(key);</span>
+    }
+
+    static String key(String targetType, Long targetId) {
+<span class="nc" id="L56">        return targetType + &quot;:&quot; + targetId;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

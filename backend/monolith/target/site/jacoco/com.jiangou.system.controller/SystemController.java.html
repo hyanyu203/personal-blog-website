@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SystemController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.system.controller</a> &gt; <span class="el_source">SystemController.java</span></div><h1>SystemController.java</h1><pre class="source lang-java linenums">package com.jiangou.system.controller;
+
+import com.jiangou.common.result.ApiResult;
+import com.jiangou.system.service.StatsService;
+import com.jiangou.system.service.SystemSettingService;
+import com.jiangou.system.service.HomeService;
+import com.jiangou.system.vo.HomeVO;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
+
+@Tag(name = &quot;System&quot;)
+@RestController
+@RequestMapping(&quot;/api/v1&quot;)
+public class SystemController {
+
+    private final SystemSettingService systemSettingService;
+    private final StatsService statsService;
+    private final HomeService homeService;
+
+    public SystemController(SystemSettingService systemSettingService, StatsService statsService,
+<span class="nc" id="L25">                            HomeService homeService) {</span>
+<span class="nc" id="L26">        this.systemSettingService = systemSettingService;</span>
+<span class="nc" id="L27">        this.statsService = statsService;</span>
+<span class="nc" id="L28">        this.homeService = homeService;</span>
+<span class="nc" id="L29">    }</span>
+
+    @GetMapping(&quot;/home&quot;)
+    public ApiResult&lt;HomeVO&gt; home() {
+<span class="nc" id="L33">        return ApiResult.ok(homeService.loadHome());</span>
+    }
+
+    @GetMapping(&quot;/settings/public&quot;)
+    public ApiResult&lt;Map&lt;String, Object&gt;&gt; publicSettings() {
+<span class="nc" id="L38">        return ApiResult.ok(systemSettingService.getPublicSettings());</span>
+    }
+
+    @GetMapping(&quot;/stats&quot;)
+    public ApiResult&lt;Map&lt;String, Object&gt;&gt; stats() {
+<span class="nc" id="L43">        return ApiResult.ok(statsService.publicStats());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

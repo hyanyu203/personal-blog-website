@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: jiangou
+  profiles:
+    active: dev
+  jackson:
+    default-property-inclusion: non_null
+    date-format: yyyy-MM-dd'T'HH:mm:ss'Z'
+    time-zone: UTC
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+jiangou:
+  jwt:
+    secret: ${JWT_SECRET:jiangou-dev-secret-change-in-production-min-32-chars}
+    access-token-expiration-ms: 3600000
+    refresh-token-expiration-ms: 604800000
+    cookie-secure: ${JWT_COOKIE_SECURE:false}
+  site-url: ${NUXT_PUBLIC_SITE_URL:http://localhost:3000}
+  admin-url: ${ADMIN_URL:http://localhost:5173/admin}
+  site-title: 渐构
+  search:
+    engine: ${SEARCH_ENGINE:mysql}
+    meilisearch:
+      host: ${MEILISEARCH_HOST:http://localhost:7700}
+      api-key: ${MEILISEARCH_API_KEY:masterKey}
+      index: jiangou
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${MINIO_PUBLIC_ENDPOINT:${MINIO_ENDPOINT:http://localhost:9000}}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: ${MINIO_BUCKET:jiangou}
+  github:
+    token: ${GITHUB_TOKEN:}
+    oauth:
+      client-id: ${GITHUB_OAUTH_CLIENT_ID:}
+      client-secret: ${GITHUB_OAUTH_CLIENT_SECRET:}
+      redirect-uri: ${GITHUB_OAUTH_REDIRECT_URI:http://localhost:8080/api/v1/auth/github/callback}
+      allowed-usernames: ${GITHUB_OAUTH_ALLOWED_USERNAMES:}
+  cors:
+    allowed-origin-patterns:
+      - http://localhost:3000
+      - http://localhost:5173
+      - http://127.0.0.1:3000
+      - http://127.0.0.1:5173
+  rate-limit:
+    trust-proxy-headers: ${RATE_LIMIT_TRUST_PROXY:false}
+  auth:
+    registration-enabled: true
+    email-code-ttl-seconds: 300
+    email-code-send-interval-seconds: 60
+    bcrypt-strength: 12
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: when_authorized
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

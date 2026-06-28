@@ -1,0 +1,1 @@
+function n(r){if(!r||typeof r!="string")return"/";const t=r.trim();if(!t.startsWith("/")||t.startsWith("//")||t.includes("://")||t.includes("\\"))return"/";try{const e=decodeURIComponent(t);if(e.startsWith("//")||e.includes("://")||e.includes("\\"))return"/"}catch{return"/"}return t}export{n as s};

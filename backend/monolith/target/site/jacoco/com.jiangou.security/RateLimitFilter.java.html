@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RateLimitFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.security</a> &gt; <span class="el_source">RateLimitFilter.java</span></div><h1>RateLimitFilter.java</h1><pre class="source lang-java linenums">package com.jiangou.security;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jiangou.common.constant.ErrorCodes;
+import com.jiangou.common.result.ApiResult;
+import com.jiangou.common.service.RateLimitService;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE + 10)
+public class RateLimitFilter extends OncePerRequestFilter {
+
+    private final RateLimitService rateLimitService;
+    private final ObjectMapper objectMapper;
+    private final ClientIpResolver clientIpResolver;
+
+    public RateLimitFilter(RateLimitService rateLimitService, ObjectMapper objectMapper,
+<span class="fc" id="L29">                           ClientIpResolver clientIpResolver) {</span>
+<span class="fc" id="L30">        this.rateLimitService = rateLimitService;</span>
+<span class="fc" id="L31">        this.objectMapper = objectMapper;</span>
+<span class="fc" id="L32">        this.clientIpResolver = clientIpResolver;</span>
+<span class="fc" id="L33">    }</span>
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+<span class="nc" id="L38">        String uri = request.getRequestURI();</span>
+<span class="nc" id="L39">        String method = request.getMethod();</span>
+<span class="nc bnc" id="L40" title="All 2 branches missed.">        if (shouldLimit(uri, method)) {</span>
+<span class="nc" id="L41">            String clientKey = clientKey(request);</span>
+<span class="nc" id="L42">            int max = maxForPath(uri);</span>
+<span class="nc bnc" id="L43" title="All 2 branches missed.">            if (!rateLimitService.tryAcquire(clientKey + &quot;:&quot; + method + &quot;:&quot; + uri, max, 60)) {</span>
+<span class="nc" id="L44">                response.setStatus(429);</span>
+<span class="nc" id="L45">                response.setCharacterEncoding(StandardCharsets.UTF_8.name());</span>
+<span class="nc" id="L46">                response.setContentType(MediaType.APPLICATION_JSON_VALUE);</span>
+<span class="nc" id="L47">                response.getWriter().write(objectMapper.writeValueAsString(</span>
+<span class="nc" id="L48">                        ApiResult.fail(ErrorCodes.RATE_LIMIT, &quot;请求过于频繁，请稍后再试&quot;)));</span>
+<span class="nc" id="L49">                return;</span>
+            }
+        }
+<span class="nc" id="L52">        filterChain.doFilter(request, response);</span>
+<span class="nc" id="L53">    }</span>
+
+    private boolean shouldLimit(String uri, String method) {
+<span class="nc bnc" id="L56" title="All 2 branches missed.">        if (uri.startsWith(&quot;/api/v1/admin&quot;)) {</span>
+<span class="nc" id="L57">            return true;</span>
+        }
+<span class="nc bnc" id="L59" title="All 2 branches missed.">        if (&quot;GET&quot;.equalsIgnoreCase(method)) {</span>
+<span class="nc bnc" id="L60" title="All 2 branches missed.">            return uri.startsWith(&quot;/api/v1/auth/captcha&quot;)</span>
+<span class="nc bnc" id="L61" title="All 2 branches missed.">                    || uri.startsWith(&quot;/api/v1/search&quot;);</span>
+        }
+<span class="nc bnc" id="L63" title="All 4 branches missed.">        if (!&quot;POST&quot;.equalsIgnoreCase(method) &amp;&amp; !&quot;PATCH&quot;.equalsIgnoreCase(method)</span>
+<span class="nc bnc" id="L64" title="All 4 branches missed.">                &amp;&amp; !&quot;PUT&quot;.equalsIgnoreCase(method) &amp;&amp; !&quot;DELETE&quot;.equalsIgnoreCase(method)) {</span>
+<span class="nc" id="L65">            return false;</span>
+        }
+<span class="nc bnc" id="L67" title="All 2 branches missed.">        return uri.startsWith(&quot;/api/v1/auth/login&quot;)</span>
+<span class="nc bnc" id="L68" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/auth/refresh&quot;)</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/auth/oauth/exchange&quot;)</span>
+<span class="nc bnc" id="L70" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/auth/register&quot;)</span>
+<span class="nc bnc" id="L71" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/auth/forgot-password&quot;)</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/auth/reset-password&quot;)</span>
+<span class="nc bnc" id="L73" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/comments&quot;)</span>
+<span class="nc bnc" id="L74" title="All 2 branches missed.">                || uri.contains(&quot;/like&quot;)</span>
+<span class="nc bnc" id="L75" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/subscriptions&quot;)</span>
+<span class="nc bnc" id="L76" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/webmention&quot;);</span>
+    }
+
+    private int maxForPath(String uri) {
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (uri.startsWith(&quot;/api/v1/admin&quot;)) {</span>
+<span class="nc" id="L81">            return 120;</span>
+        }
+<span class="nc bnc" id="L83" title="All 2 branches missed.">        if (uri.startsWith(&quot;/api/v1/auth/captcha&quot;)) {</span>
+<span class="nc" id="L84">            return 30;</span>
+        }
+<span class="nc bnc" id="L86" title="All 2 branches missed.">        if (uri.startsWith(&quot;/api/v1/search&quot;)) {</span>
+<span class="nc" id="L87">            return 60;</span>
+        }
+<span class="nc bnc" id="L89" title="All 2 branches missed.">        if (uri.startsWith(&quot;/api/v1/subscriptions/confirm&quot;)</span>
+<span class="nc bnc" id="L90" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/subscriptions/unsubscribe&quot;)) {</span>
+<span class="nc" id="L91">            return 20;</span>
+        }
+<span class="nc bnc" id="L93" title="All 2 branches missed.">        if (uri.startsWith(&quot;/api/v1/auth/login&quot;)) {</span>
+<span class="nc" id="L94">            return 10;</span>
+        }
+<span class="nc bnc" id="L96" title="All 2 branches missed.">        if (uri.startsWith(&quot;/api/v1/auth/register/send-code&quot;)</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/auth/forgot-password/send-code&quot;)) {</span>
+<span class="nc" id="L98">            return 5;</span>
+        }
+<span class="nc bnc" id="L100" title="All 2 branches missed.">        if (uri.startsWith(&quot;/api/v1/auth/register&quot;)</span>
+<span class="nc bnc" id="L101" title="All 2 branches missed.">                || uri.startsWith(&quot;/api/v1/auth/reset-password&quot;)) {</span>
+<span class="nc" id="L102">            return 10;</span>
+        }
+<span class="nc bnc" id="L104" title="All 4 branches missed.">        if (uri.startsWith(&quot;/api/v1/auth/refresh&quot;) || uri.startsWith(&quot;/api/v1/auth/oauth/exchange&quot;)) {</span>
+<span class="nc" id="L105">            return 20;</span>
+        }
+<span class="nc bnc" id="L107" title="All 2 branches missed.">        if (uri.startsWith(&quot;/api/v1/subscriptions&quot;)) {</span>
+<span class="nc" id="L108">            return 10;</span>
+        }
+<span class="nc bnc" id="L110" title="All 2 branches missed.">        if (uri.startsWith(&quot;/api/v1/webmention&quot;)) {</span>
+<span class="nc" id="L111">            return 10;</span>
+        }
+<span class="nc bnc" id="L113" title="All 2 branches missed.">        if (uri.contains(&quot;/like&quot;)) {</span>
+<span class="nc" id="L114">            return 30;</span>
+        }
+<span class="nc" id="L116">        return 20;</span>
+    }
+
+    private String clientKey(HttpServletRequest request) {
+<span class="nc" id="L120">        return clientIpResolver.resolve(request);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

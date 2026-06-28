@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WebmentionService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.webmention.service</a> &gt; <span class="el_source">WebmentionService.java</span></div><h1>WebmentionService.java</h1><pre class="source lang-java linenums">package com.jiangou.webmention.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jiangou.common.exception.ValidationException;
+import com.jiangou.common.util.UrlSafetyUtils;
+import com.jiangou.common.result.PageResult;
+import com.jiangou.system.service.SystemSettingService;
+import com.jiangou.webmention.entity.WebmentionEntity;
+import com.jiangou.webmention.mapper.WebmentionMapper;
+import com.jiangou.webmention.vo.WebmentionVO;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class WebmentionService {
+
+    private final WebmentionMapper webmentionMapper;
+    private final SystemSettingService systemSettingService;
+    private final WebmentionVerificationWorker verificationWorker;
+
+    @Value(&quot;${jiangou.site-url:http://localhost:3000}&quot;)
+    private String siteUrl;
+
+    public WebmentionService(WebmentionMapper webmentionMapper,
+                             SystemSettingService systemSettingService,
+<span class="nc" id="L33">                             WebmentionVerificationWorker verificationWorker) {</span>
+<span class="nc" id="L34">        this.webmentionMapper = webmentionMapper;</span>
+<span class="nc" id="L35">        this.systemSettingService = systemSettingService;</span>
+<span class="nc" id="L36">        this.verificationWorker = verificationWorker;</span>
+<span class="nc" id="L37">    }</span>
+
+    public boolean isEnabled() {
+<span class="nc" id="L40">        String value = systemSettingService.getValue(&quot;webmentionEnabled&quot;);</span>
+<span class="nc" id="L41">        return &quot;true&quot;.equalsIgnoreCase(value);</span>
+    }
+
+    @Transactional
+    public WebmentionVO receive(String source, String target) {
+<span class="nc bnc" id="L46" title="All 2 branches missed.">        if (!isEnabled()) {</span>
+<span class="nc" id="L47">            throw new ValidationException(&quot;Webmention 未启用&quot;);</span>
+        }
+<span class="nc bnc" id="L49" title="All 4 branches missed.">        if (!StringUtils.hasText(source) || !StringUtils.hasText(target)) {</span>
+<span class="nc" id="L50">            throw new ValidationException(&quot;source 与 target 必填&quot;);</span>
+        }
+<span class="nc" id="L52">        UrlSafetyUtils.validateSameSiteTarget(target, siteUrl);</span>
+<span class="nc" id="L53">        UrlSafetyUtils.validateExternalHttpUrl(source.trim());</span>
+
+<span class="nc" id="L55">        WebmentionEntity entity = new WebmentionEntity();</span>
+<span class="nc" id="L56">        entity.setSourceUrl(source.trim());</span>
+<span class="nc" id="L57">        entity.setTargetUrl(target.trim());</span>
+<span class="nc" id="L58">        entity.setType(&quot;mention&quot;);</span>
+<span class="nc" id="L59">        entity.setStatus(&quot;pending&quot;);</span>
+<span class="nc" id="L60">        entity.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L61">        entity.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L62">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L63">        webmentionMapper.insert(entity);</span>
+
+<span class="nc" id="L65">        verificationWorker.verify(entity.getId(), source.trim(), target.trim());</span>
+<span class="nc" id="L66">        return toVo(entity);</span>
+    }
+
+    public PageResult&lt;WebmentionVO&gt; listAdmin(long page, long pageSize, String status) {
+<span class="nc" id="L70">        LambdaQueryWrapper&lt;WebmentionEntity&gt; wrapper = new LambdaQueryWrapper&lt;WebmentionEntity&gt;()</span>
+<span class="nc" id="L71">                .orderByDesc(WebmentionEntity::getCreatedAt);</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">        if (StringUtils.hasText(status)) {</span>
+<span class="nc" id="L73">            wrapper.eq(WebmentionEntity::getStatus, status);</span>
+        }
+<span class="nc" id="L75">        Page&lt;WebmentionEntity&gt; result = webmentionMapper.selectPage(new Page&lt;&gt;(page, pageSize), wrapper);</span>
+<span class="nc" id="L76">        List&lt;WebmentionVO&gt; items = result.getRecords().stream().map(this::toVo).collect(Collectors.toList());</span>
+<span class="nc" id="L77">        return PageResult.of(items, result.getTotal(), page, pageSize);</span>
+    }
+
+    private WebmentionVO toVo(WebmentionEntity e) {
+<span class="nc" id="L81">        return WebmentionVO.builder()</span>
+<span class="nc" id="L82">                .id(e.getId())</span>
+<span class="nc" id="L83">                .sourceUrl(e.getSourceUrl())</span>
+<span class="nc" id="L84">                .targetUrl(e.getTargetUrl())</span>
+<span class="nc" id="L85">                .type(e.getType())</span>
+<span class="nc" id="L86">                .status(e.getStatus())</span>
+<span class="nc" id="L87">                .verifiedAt(e.getVerifiedAt())</span>
+<span class="nc" id="L88">                .createdAt(e.getCreatedAt())</span>
+<span class="nc" id="L89">                .build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

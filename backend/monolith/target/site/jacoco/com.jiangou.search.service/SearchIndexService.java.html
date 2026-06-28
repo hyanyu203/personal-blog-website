@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SearchIndexService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.search.service</a> &gt; <span class="el_source">SearchIndexService.java</span></div><h1>SearchIndexService.java</h1><pre class="source lang-java linenums">package com.jiangou.search.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.jiangou.article.entity.ArticleEntity;
+import com.jiangou.article.mapper.ArticleMapper;
+import com.jiangou.note.entity.NoteEntity;
+import com.jiangou.note.mapper.NoteMapper;
+import com.jiangou.project.entity.ProjectEntity;
+import com.jiangou.project.mapper.ProjectMapper;
+import com.jiangou.search.engine.MeilisearchSearchEngine;
+import com.jiangou.search.entity.SearchDocumentEntity;
+import com.jiangou.search.mapper.SearchDocumentMapper;
+import com.jiangou.search.util.SearchMetadataUtils;
+import com.jiangou.snippet.entity.SnippetEntity;
+import com.jiangou.snippet.mapper.SnippetMapper;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+public class SearchIndexService {
+
+    private final SearchDocumentMapper searchDocumentMapper;
+    private final ArticleMapper articleMapper;
+    private final SnippetMapper snippetMapper;
+    private final NoteMapper noteMapper;
+    private final ProjectMapper projectMapper;
+    private final ObjectProvider&lt;MeilisearchSearchEngine&gt; meilisearchSearchEngine;
+
+    public SearchIndexService(SearchDocumentMapper searchDocumentMapper, ArticleMapper articleMapper,
+                              SnippetMapper snippetMapper, NoteMapper noteMapper, ProjectMapper projectMapper,
+<span class="nc" id="L35">                              ObjectProvider&lt;MeilisearchSearchEngine&gt; meilisearchSearchEngine) {</span>
+<span class="nc" id="L36">        this.searchDocumentMapper = searchDocumentMapper;</span>
+<span class="nc" id="L37">        this.articleMapper = articleMapper;</span>
+<span class="nc" id="L38">        this.snippetMapper = snippetMapper;</span>
+<span class="nc" id="L39">        this.noteMapper = noteMapper;</span>
+<span class="nc" id="L40">        this.projectMapper = projectMapper;</span>
+<span class="nc" id="L41">        this.meilisearchSearchEngine = meilisearchSearchEngine;</span>
+<span class="nc" id="L42">    }</span>
+
+    @Transactional
+    public int rebuildAll() {
+<span class="nc" id="L46">        searchDocumentMapper.delete(null);</span>
+<span class="nc" id="L47">        int count = 0;</span>
+<span class="nc" id="L48">        count += indexArticles();</span>
+<span class="nc" id="L49">        count += indexSnippets();</span>
+<span class="nc" id="L50">        count += indexNotes();</span>
+<span class="nc" id="L51">        count += indexProjects();</span>
+<span class="nc" id="L52">        syncMeilisearchAll();</span>
+<span class="nc" id="L53">        return count;</span>
+    }
+
+    @Transactional
+    public void syncArticleById(Long id) {
+<span class="nc bnc" id="L58" title="All 2 branches missed.">        if (id == null) {</span>
+<span class="nc" id="L59">            return;</span>
+        }
+<span class="nc" id="L61">        ArticleEntity article = articleMapper.selectById(id);</span>
+<span class="nc" id="L62">        syncArticle(article);</span>
+<span class="nc" id="L63">    }</span>
+
+    @Transactional
+    public void syncNoteById(Long id) {
+<span class="nc bnc" id="L67" title="All 2 branches missed.">        if (id == null) {</span>
+<span class="nc" id="L68">            return;</span>
+        }
+<span class="nc" id="L70">        NoteEntity note = noteMapper.selectById(id);</span>
+<span class="nc" id="L71">        syncNote(note);</span>
+<span class="nc" id="L72">    }</span>
+
+    @Transactional
+    public void syncSnippetById(Long id) {
+<span class="nc bnc" id="L76" title="All 2 branches missed.">        if (id == null) {</span>
+<span class="nc" id="L77">            return;</span>
+        }
+<span class="nc" id="L79">        SnippetEntity snippet = snippetMapper.selectById(id);</span>
+<span class="nc" id="L80">        syncSnippet(snippet);</span>
+<span class="nc" id="L81">    }</span>
+
+    @Transactional
+    public void syncProjectById(Long id) {
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        if (id == null) {</span>
+<span class="nc" id="L86">            return;</span>
+        }
+<span class="nc" id="L88">        syncProject(projectMapper.selectById(id));</span>
+<span class="nc" id="L89">    }</span>
+
+    public void syncProject(ProjectEntity project) {
+<span class="nc bnc" id="L92" title="All 4 branches missed.">        if (project == null || project.getId() == null) {</span>
+<span class="nc" id="L93">            return;</span>
+        }
+<span class="nc bnc" id="L95" title="All 2 branches missed.">        if (project.getDeletedAt() == null) {</span>
+<span class="nc bnc" id="L96" title="All 2 branches missed.">            String title = project.getName() != null ? project.getName()</span>
+<span class="nc" id="L97">                    : project.getOwner() + &quot;/&quot; + project.getRepo();</span>
+<span class="nc" id="L98">            upsertDocument(&quot;project&quot;, project.getId(), title,</span>
+<span class="nc bnc" id="L99" title="All 2 branches missed.">                    project.getDescription() == null ? &quot;&quot; : project.getDescription(),</span>
+<span class="nc" id="L100">                    SearchMetadataUtils.withUrl(&quot;/projects/&quot; + project.getOwner() + &quot;/&quot; + project.getRepo()));</span>
+<span class="nc" id="L101">        } else {</span>
+<span class="nc" id="L102">            removeDocument(&quot;project&quot;, project.getId());</span>
+        }
+<span class="nc" id="L104">    }</span>
+
+    public void replayMeilisearchDocument(String targetType, Long targetId) {
+<span class="nc" id="L107">        MeilisearchSearchEngine engine = meilisearchSearchEngine.getIfAvailable();</span>
+<span class="nc bnc" id="L108" title="All 6 branches missed.">        if (engine == null || targetType == null || targetId == null) {</span>
+<span class="nc" id="L109">            return;</span>
+        }
+<span class="nc" id="L111">        SearchDocumentEntity doc = searchDocumentMapper.selectOne(new LambdaQueryWrapper&lt;SearchDocumentEntity&gt;()</span>
+<span class="nc" id="L112">                .eq(SearchDocumentEntity::getTargetType, targetType)</span>
+<span class="nc" id="L113">                .eq(SearchDocumentEntity::getTargetId, targetId)</span>
+<span class="nc" id="L114">                .eq(SearchDocumentEntity::getStatus, &quot;active&quot;));</span>
+<span class="nc bnc" id="L115" title="All 2 branches missed.">        if (doc != null) {</span>
+<span class="nc" id="L116">            engine.upsertDocument(doc);</span>
+        } else {
+<span class="nc" id="L118">            engine.deleteDocument(targetType, targetId);</span>
+        }
+<span class="nc" id="L120">    }</span>
+
+    public void syncArticle(ArticleEntity article) {
+<span class="nc bnc" id="L123" title="All 4 branches missed.">        if (article == null || article.getId() == null) {</span>
+<span class="nc" id="L124">            return;</span>
+        }
+<span class="nc bnc" id="L126" title="All 2 branches missed.">        if (isArticleSearchable(article)) {</span>
+<span class="nc" id="L127">            upsertDocument(&quot;article&quot;, article.getId(), article.getTitle(),</span>
+<span class="nc bnc" id="L128" title="All 2 branches missed.">                    (article.getSummary() == null ? &quot;&quot; : article.getSummary()) + &quot; &quot;</span>
+<span class="nc bnc" id="L129" title="All 2 branches missed.">                            + (article.getContentText() == null ? &quot;&quot; : article.getContentText()),</span>
+<span class="nc" id="L130">                    SearchMetadataUtils.withUrl(&quot;/posts/&quot; + article.getSlug()));</span>
+        } else {
+<span class="nc" id="L132">            removeDocument(&quot;article&quot;, article.getId());</span>
+        }
+<span class="nc" id="L134">    }</span>
+
+    public void syncNote(NoteEntity note) {
+<span class="nc bnc" id="L137" title="All 4 branches missed.">        if (note == null || note.getId() == null) {</span>
+<span class="nc" id="L138">            return;</span>
+        }
+<span class="nc bnc" id="L140" title="All 2 branches missed.">        if (isNoteSearchable(note)) {</span>
+<span class="nc" id="L141">            upsertDocument(&quot;note&quot;, note.getId(), &quot;碎碎念&quot;,</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">                    note.getContentText() == null ? &quot;&quot; : note.getContentText(),</span>
+<span class="nc" id="L143">                    SearchMetadataUtils.withUrl(&quot;/notes#&quot; + note.getId()));</span>
+        } else {
+<span class="nc" id="L145">            removeDocument(&quot;note&quot;, note.getId());</span>
+        }
+<span class="nc" id="L147">    }</span>
+
+    public void syncSnippet(SnippetEntity snippet) {
+<span class="nc bnc" id="L150" title="All 4 branches missed.">        if (snippet == null || snippet.getId() == null) {</span>
+<span class="nc" id="L151">            return;</span>
+        }
+<span class="nc bnc" id="L153" title="All 2 branches missed.">        if (isSnippetSearchable(snippet)) {</span>
+<span class="nc" id="L154">            upsertDocument(&quot;snippet&quot;, snippet.getId(), snippet.getTitle(), snippet.getCode(),</span>
+<span class="nc" id="L155">                    SearchMetadataUtils.withUrl(&quot;/snippets/&quot; + snippet.getSlug()));</span>
+        } else {
+<span class="nc" id="L157">            removeDocument(&quot;snippet&quot;, snippet.getId());</span>
+        }
+<span class="nc" id="L159">    }</span>
+
+    static boolean isArticleSearchable(ArticleEntity article) {
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        return article.getDeletedAt() == null</span>
+<span class="nc bnc" id="L163" title="All 2 branches missed.">                &amp;&amp; &quot;published&quot;.equals(article.getStatus())</span>
+<span class="nc bnc" id="L164" title="All 2 branches missed.">                &amp;&amp; &quot;public&quot;.equals(article.getVisibility());</span>
+    }
+
+    static boolean isNoteSearchable(NoteEntity note) {
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        return note.getDeletedAt() == null</span>
+<span class="nc bnc" id="L169" title="All 2 branches missed.">                &amp;&amp; &quot;published&quot;.equals(note.getStatus())</span>
+<span class="nc bnc" id="L170" title="All 2 branches missed.">                &amp;&amp; &quot;public&quot;.equals(note.getVisibility());</span>
+    }
+
+    static boolean isSnippetSearchable(SnippetEntity snippet) {
+<span class="nc bnc" id="L174" title="All 4 branches missed.">        return snippet.getDeletedAt() == null &amp;&amp; &quot;public&quot;.equals(snippet.getVisibility());</span>
+    }
+
+    private void syncMeilisearchAll() {
+<span class="nc" id="L178">        MeilisearchSearchEngine engine = meilisearchSearchEngine.getIfAvailable();</span>
+<span class="nc bnc" id="L179" title="All 2 branches missed.">        if (engine == null) {</span>
+<span class="nc" id="L180">            return;</span>
+        }
+<span class="nc" id="L182">        List&lt;SearchDocumentEntity&gt; docs = searchDocumentMapper.selectList(</span>
+<span class="nc" id="L183">                new LambdaQueryWrapper&lt;SearchDocumentEntity&gt;().eq(SearchDocumentEntity::getStatus, &quot;active&quot;));</span>
+<span class="nc" id="L184">        engine.replaceAll(docs);</span>
+<span class="nc" id="L185">    }</span>
+
+    private int indexArticles() {
+<span class="nc" id="L188">        List&lt;ArticleEntity&gt; articles = articleMapper.selectList(new LambdaQueryWrapper&lt;ArticleEntity&gt;()</span>
+<span class="nc" id="L189">                .eq(ArticleEntity::getStatus, &quot;published&quot;)</span>
+<span class="nc" id="L190">                .eq(ArticleEntity::getVisibility, &quot;public&quot;)</span>
+<span class="nc" id="L191">                .isNull(ArticleEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L192" title="All 2 branches missed.">        for (ArticleEntity a : articles) {</span>
+<span class="nc" id="L193">            upsertDocument(&quot;article&quot;, a.getId(), a.getTitle(),</span>
+<span class="nc bnc" id="L194" title="All 2 branches missed.">                    (a.getSummary() == null ? &quot;&quot; : a.getSummary()) + &quot; &quot;</span>
+<span class="nc bnc" id="L195" title="All 2 branches missed.">                            + (a.getContentText() == null ? &quot;&quot; : a.getContentText()),</span>
+<span class="nc" id="L196">                    SearchMetadataUtils.withUrl(&quot;/posts/&quot; + a.getSlug()));</span>
+<span class="nc" id="L197">        }</span>
+<span class="nc" id="L198">        return articles.size();</span>
+    }
+
+    private int indexSnippets() {
+<span class="nc" id="L202">        List&lt;SnippetEntity&gt; list = snippetMapper.selectList(new LambdaQueryWrapper&lt;SnippetEntity&gt;()</span>
+<span class="nc" id="L203">                .eq(SnippetEntity::getVisibility, &quot;public&quot;)</span>
+<span class="nc" id="L204">                .isNull(SnippetEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">        for (SnippetEntity s : list) {</span>
+<span class="nc" id="L206">            upsertDocument(&quot;snippet&quot;, s.getId(), s.getTitle(), s.getCode(),</span>
+<span class="nc" id="L207">                    SearchMetadataUtils.withUrl(&quot;/snippets/&quot; + s.getSlug()));</span>
+<span class="nc" id="L208">        }</span>
+<span class="nc" id="L209">        return list.size();</span>
+    }
+
+    private int indexNotes() {
+<span class="nc" id="L213">        List&lt;NoteEntity&gt; list = noteMapper.selectList(new LambdaQueryWrapper&lt;NoteEntity&gt;()</span>
+<span class="nc" id="L214">                .eq(NoteEntity::getStatus, &quot;published&quot;)</span>
+<span class="nc" id="L215">                .eq(NoteEntity::getVisibility, &quot;public&quot;)</span>
+<span class="nc" id="L216">                .isNull(NoteEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L217" title="All 2 branches missed.">        for (NoteEntity n : list) {</span>
+<span class="nc bnc" id="L218" title="All 2 branches missed.">            upsertDocument(&quot;note&quot;, n.getId(), &quot;碎碎念&quot;, n.getContentText() == null ? &quot;&quot; : n.getContentText(),</span>
+<span class="nc" id="L219">                    SearchMetadataUtils.withUrl(&quot;/notes#&quot; + n.getId()));</span>
+<span class="nc" id="L220">        }</span>
+<span class="nc" id="L221">        return list.size();</span>
+    }
+
+    private int indexProjects() {
+<span class="nc" id="L225">        List&lt;ProjectEntity&gt; list = projectMapper.selectList(new LambdaQueryWrapper&lt;ProjectEntity&gt;()</span>
+<span class="nc" id="L226">                .isNull(ProjectEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L227" title="All 2 branches missed.">        for (ProjectEntity p : list) {</span>
+<span class="nc bnc" id="L228" title="All 2 branches missed.">            String title = p.getName() != null ? p.getName() : p.getOwner() + &quot;/&quot; + p.getRepo();</span>
+<span class="nc bnc" id="L229" title="All 2 branches missed.">            upsertDocument(&quot;project&quot;, p.getId(), title, p.getDescription() == null ? &quot;&quot; : p.getDescription(),</span>
+<span class="nc" id="L230">                    SearchMetadataUtils.withUrl(&quot;/projects/&quot; + p.getOwner() + &quot;/&quot; + p.getRepo()));</span>
+<span class="nc" id="L231">        }</span>
+<span class="nc" id="L232">        return list.size();</span>
+    }
+
+    private void upsertDocument(String type, Long targetId, String title, String content, String metadata) {
+<span class="nc" id="L236">        removeDocument(type, targetId);</span>
+<span class="nc" id="L237">        SearchDocumentEntity doc = new SearchDocumentEntity();</span>
+<span class="nc" id="L238">        doc.setTargetType(type);</span>
+<span class="nc" id="L239">        doc.setTargetId(targetId);</span>
+<span class="nc" id="L240">        doc.setTitle(title);</span>
+<span class="nc" id="L241">        doc.setContent(content);</span>
+<span class="nc" id="L242">        doc.setStatus(&quot;active&quot;);</span>
+<span class="nc" id="L243">        doc.setBoost(1.0f);</span>
+<span class="nc" id="L244">        doc.setMetadata(metadata);</span>
+<span class="nc" id="L245">        doc.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L246">        doc.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L247">        searchDocumentMapper.insert(doc);</span>
+<span class="nc" id="L248">        MeilisearchSearchEngine engine = meilisearchSearchEngine.getIfAvailable();</span>
+<span class="nc bnc" id="L249" title="All 2 branches missed.">        if (engine != null) {</span>
+<span class="nc" id="L250">            engine.upsertDocument(doc);</span>
+        }
+<span class="nc" id="L252">    }</span>
+
+    private void removeDocument(String type, Long targetId) {
+<span class="nc" id="L255">        searchDocumentMapper.delete(new LambdaQueryWrapper&lt;SearchDocumentEntity&gt;()</span>
+<span class="nc" id="L256">                .eq(SearchDocumentEntity::getTargetType, type)</span>
+<span class="nc" id="L257">                .eq(SearchDocumentEntity::getTargetId, targetId));</span>
+<span class="nc" id="L258">        MeilisearchSearchEngine engine = meilisearchSearchEngine.getIfAvailable();</span>
+<span class="nc bnc" id="L259" title="All 2 branches missed.">        if (engine != null) {</span>
+<span class="nc" id="L260">            engine.deleteDocument(type, targetId);</span>
+        }
+<span class="nc" id="L262">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

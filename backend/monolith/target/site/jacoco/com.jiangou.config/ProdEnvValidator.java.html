@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ProdEnvValidator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.config</a> &gt; <span class="el_source">ProdEnvValidator.java</span></div><h1>ProdEnvValidator.java</h1><pre class="source lang-java linenums">package com.jiangou.config;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+
+import javax.annotation.PostConstruct;
+import java.net.URI;
+import java.util.Arrays;
+import java.util.Locale;
+
+@Component
+@Profile(&quot;prod&quot;)
+<span class="fc" id="L15">public class ProdEnvValidator {</span>
+
+    private static final String DEFAULT_SECRET = &quot;jiangou-dev-secret-change-in-production-min-32-chars&quot;;
+    private static final String DEFAULT_MINIO_SECRET = &quot;minioadmin&quot;;
+    private static final String DEFAULT_MINIO_USER = &quot;minioadmin&quot;;
+    private static final String DEFAULT_MEILI_KEY = &quot;masterKey&quot;;
+
+    @Value(&quot;${spring.datasource.password:}&quot;)
+    private String mysqlPassword;
+
+    @Value(&quot;${spring.datasource.username:}&quot;)
+    private String mysqlUser;
+
+    @Value(&quot;${jiangou.jwt.secret:}&quot;)
+    private String jwtSecret;
+
+    @Value(&quot;${jiangou.jwt.cookie-secure:true}&quot;)
+    private boolean jwtCookieSecure;
+
+    @Value(&quot;${jiangou.auth.registration-enabled:false}&quot;)
+    private boolean registrationEnabled;
+
+    @Value(&quot;${spring.mail.host:}&quot;)
+    private String mailHost;
+
+    @Value(&quot;${spring.mail.password:}&quot;)
+    private String mailPassword;
+
+    @Value(&quot;${jiangou.minio.secret-key:}&quot;)
+    private String minioSecretKey;
+
+    @Value(&quot;${jiangou.minio.access-key:}&quot;)
+    private String minioAccessKey;
+
+    @Value(&quot;${spring.redis.password:}&quot;)
+    private String redisPassword;
+
+    @Value(&quot;${jiangou.search.engine:mysql}&quot;)
+    private String searchEngine;
+
+    @Value(&quot;${jiangou.search.meilisearch.api-key:}&quot;)
+    private String meilisearchApiKey;
+
+    @Value(&quot;${jiangou.github.oauth.client-id:}&quot;)
+    private String githubOAuthClientId;
+
+    @Value(&quot;${jiangou.github.oauth.client-secret:}&quot;)
+    private String githubOAuthClientSecret;
+
+    @Value(&quot;${jiangou.github.oauth.allowed-usernames:}&quot;)
+    private String githubOAuthAllowedUsernames;
+
+    @Value(&quot;${jiangou.site-url:}&quot;)
+    private String siteUrl;
+
+    @Value(&quot;${jiangou.admin-url:}&quot;)
+    private String adminUrl;
+
+    @Value(&quot;${jiangou.cors.allowed-origin-patterns:}&quot;)
+    private String corsAllowedOrigins;
+
+    @Value(&quot;${jiangou.prometheus.scrape-token:}&quot;)
+    private String prometheusScrapeToken;
+
+    @PostConstruct
+    public void validate() {
+<span class="fc bfc" id="L81" title="All 2 branches covered.">        if (!StringUtils.hasText(mysqlPassword)) {</span>
+<span class="fc" id="L82">            throw new IllegalStateException(&quot;生产环境必须设置 MYSQL_PASSWORD 环境变量&quot;);</span>
+        }
+<span class="pc bpc" id="L84" title="1 of 2 branches missed.">        if (&quot;root&quot;.equalsIgnoreCase(mysqlUser)) {</span>
+<span class="nc" id="L85">            throw new IllegalStateException(&quot;生产环境 MYSQL_USER 不应使用 root&quot;);</span>
+        }
+<span class="pc bpc" id="L87" title="2 of 4 branches missed.">        if (!StringUtils.hasText(jwtSecret) || DEFAULT_SECRET.equals(jwtSecret)) {</span>
+<span class="nc" id="L88">            throw new IllegalStateException(&quot;生产环境必须设置安全的 JWT_SECRET 环境变量&quot;);</span>
+        }
+<span class="fc bfc" id="L90" title="All 2 branches covered.">        if (jwtSecret.length() &lt; 32) {</span>
+<span class="fc" id="L91">            throw new IllegalStateException(&quot;JWT_SECRET 长度至少 32 字符&quot;);</span>
+        }
+<span class="pc bpc" id="L93" title="1 of 4 branches missed.">        if (!StringUtils.hasText(minioSecretKey) || DEFAULT_MINIO_SECRET.equals(minioSecretKey)) {</span>
+<span class="fc" id="L94">            throw new IllegalStateException(&quot;生产环境必须设置安全的 MINIO_SECRET_KEY 环境变量&quot;);</span>
+        }
+<span class="pc bpc" id="L96" title="2 of 4 branches missed.">        if (!StringUtils.hasText(minioAccessKey) || DEFAULT_MINIO_USER.equals(minioAccessKey)) {</span>
+<span class="nc" id="L97">            throw new IllegalStateException(&quot;生产环境 MINIO_ACCESS_KEY 不应使用默认 minioadmin&quot;);</span>
+        }
+<span class="fc bfc" id="L99" title="All 2 branches covered.">        if (!StringUtils.hasText(redisPassword)) {</span>
+<span class="fc" id="L100">            throw new IllegalStateException(&quot;生产环境必须设置 REDIS_PASSWORD 环境变量&quot;);</span>
+        }
+<span class="fc bfc" id="L102" title="All 2 branches covered.">        if (&quot;meilisearch&quot;.equalsIgnoreCase(searchEngine)) {</span>
+<span class="pc bpc" id="L103" title="2 of 4 branches missed.">            if (!StringUtils.hasText(meilisearchApiKey) || DEFAULT_MEILI_KEY.equals(meilisearchApiKey)) {</span>
+<span class="fc" id="L104">                throw new IllegalStateException(&quot;启用 Meilisearch 时必须设置安全的 MEILISEARCH_API_KEY&quot;);</span>
+            }
+        }
+<span class="pc bpc" id="L107" title="1 of 4 branches missed.">        if (registrationEnabled &amp;&amp; !StringUtils.hasText(mailHost)) {</span>
+<span class="fc" id="L108">            throw new IllegalStateException(&quot;启用用户注册时 MAIL_HOST 必填&quot;);</span>
+        }
+<span class="pc bpc" id="L110" title="3 of 4 branches missed.">        if (registrationEnabled &amp;&amp; !StringUtils.hasText(mailPassword)) {</span>
+<span class="nc" id="L111">            throw new IllegalStateException(&quot;启用用户注册时 MAIL_PASSWORD 必填&quot;);</span>
+        }
+<span class="fc bfc" id="L113" title="All 2 branches covered.">        if (StringUtils.hasText(githubOAuthClientId)) {</span>
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">            if (!StringUtils.hasText(githubOAuthClientSecret)) {</span>
+<span class="fc" id="L115">                throw new IllegalStateException(&quot;启用 GitHub OAuth 时必须配置 GITHUB_OAUTH_CLIENT_SECRET&quot;);</span>
+            }
+<span class="nc bnc" id="L117" title="All 2 branches missed.">            if (!StringUtils.hasText(githubOAuthAllowedUsernames)) {</span>
+<span class="nc" id="L118">                throw new IllegalStateException(&quot;启用 GitHub OAuth 时必须配置 GITHUB_OAUTH_ALLOWED_USERNAMES&quot;);</span>
+            }
+        }
+<span class="fc" id="L121">        rejectLocalhostUrl(siteUrl, &quot;SITE_URL&quot;);</span>
+<span class="fc" id="L122">        rejectLocalhostUrl(adminUrl, &quot;ADMIN_URL&quot;);</span>
+<span class="fc" id="L123">        rejectLocalhostUrl(corsAllowedOrigins, &quot;CORS_ALLOWED_ORIGINS&quot;);</span>
+<span class="pc bpc" id="L124" title="2 of 4 branches missed.">        if (isHttpsSiteUrl(siteUrl) &amp;&amp; !jwtCookieSecure) {</span>
+<span class="nc" id="L125">            throw new IllegalStateException(&quot;HTTPS 站点必须启用 JWT_COOKIE_SECURE=true&quot;);</span>
+        }
+<span class="fc bfc" id="L127" title="All 2 branches covered.">        if (!StringUtils.hasText(prometheusScrapeToken)) {</span>
+<span class="fc" id="L128">            throw new IllegalStateException(&quot;生产环境必须设置 PROMETHEUS_SCRAPE_TOKEN 环境变量&quot;);</span>
+        }
+<span class="fc" id="L130">    }</span>
+
+    private void rejectLocalhostUrl(String value, String name) {
+<span class="pc bpc" id="L133" title="1 of 2 branches missed.">        if (!StringUtils.hasText(value)) {</span>
+<span class="nc" id="L134">            return;</span>
+        }
+<span class="fc" id="L136">        Arrays.stream(value.split(&quot;,&quot;))</span>
+<span class="fc" id="L137">                .map(String::trim)</span>
+<span class="fc" id="L138">                .filter(StringUtils::hasText)</span>
+<span class="fc" id="L139">                .forEach(origin -&gt; {</span>
+<span class="fc bfc" id="L140" title="All 2 branches covered.">                    if (isLocalhostOrigin(origin)) {</span>
+<span class="fc" id="L141">                        throw new IllegalStateException(name + &quot; 不应使用 localhost: &quot; + origin);</span>
+                    }
+<span class="fc" id="L143">                });</span>
+<span class="fc" id="L144">    }</span>
+
+    private boolean isLocalhostOrigin(String origin) {
+        try {
+<span class="pc bpc" id="L148" title="1 of 2 branches missed.">            URI uri = URI.create(origin.contains(&quot;://&quot;) ? origin : &quot;http://&quot; + origin);</span>
+<span class="fc" id="L149">            String host = uri.getHost();</span>
+<span class="pc bpc" id="L150" title="1 of 2 branches missed.">            if (host == null) {</span>
+<span class="nc" id="L151">                return false;</span>
+            }
+<span class="fc" id="L153">            host = host.toLowerCase(Locale.ROOT);</span>
+<span class="pc bpc" id="L154" title="2 of 6 branches missed.">            return &quot;localhost&quot;.equals(host) || &quot;127.0.0.1&quot;.equals(host) || host.endsWith(&quot;.local&quot;);</span>
+<span class="nc" id="L155">        } catch (Exception e) {</span>
+<span class="nc" id="L156">            return false;</span>
+        }
+    }
+
+    private boolean isHttpsSiteUrl(String url) {
+<span class="pc bpc" id="L161" title="1 of 2 branches missed.">        if (!StringUtils.hasText(url)) {</span>
+<span class="nc" id="L162">            return false;</span>
+        }
+        try {
+<span class="fc" id="L165">            return &quot;https&quot;.equalsIgnoreCase(URI.create(url.trim()).getScheme());</span>
+<span class="nc" id="L166">        } catch (Exception e) {</span>
+<span class="nc" id="L167">            return false;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

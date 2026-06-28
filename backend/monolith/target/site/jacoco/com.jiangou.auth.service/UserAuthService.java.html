@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserAuthService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.auth.service</a> &gt; <span class="el_source">UserAuthService.java</span></div><h1>UserAuthService.java</h1><pre class="source lang-java linenums">package com.jiangou.auth.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.jiangou.auth.dto.RegisterDTO;
+import com.jiangou.auth.dto.ResetPasswordDTO;
+import com.jiangou.auth.dto.SendRegisterCodeDTO;
+import com.jiangou.auth.dto.SendResetCodeDTO;
+import com.jiangou.auth.vo.AuthVO;
+import com.jiangou.common.constant.ErrorCodes;
+import com.jiangou.common.exception.BusinessException;
+import com.jiangou.common.exception.ConflictException;
+import com.jiangou.common.exception.ValidationException;
+import com.jiangou.config.AuthProperties;
+import com.jiangou.security.AuthUserCacheInvalidator;
+import com.jiangou.user.entity.UserEntity;
+import com.jiangou.user.mapper.UserMapper;
+import com.jiangou.user.service.RoleService;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.regex.Pattern;
+
+@Service
+public class UserAuthService {
+
+<span class="nc" id="L28">    private static final Pattern USERNAME_PATTERN = Pattern.compile(&quot;^[a-zA-Z0-9_]{3,32}$&quot;);</span>
+<span class="nc" id="L29">    private static final Pattern PASSWORD_PATTERN = Pattern.compile(&quot;^(?=.*[A-Za-z])(?=.*\\d).{8,}$&quot;);</span>
+
+    private final UserMapper userMapper;
+    private final PasswordEncoder passwordEncoder;
+    private final RoleService roleService;
+    private final AuthService authService;
+    private final CaptchaService captchaService;
+    private final EmailCodeService emailCodeService;
+    private final AuthProperties authProperties;
+    private final AuthUserCacheInvalidator authUserCacheInvalidator;
+
+    public UserAuthService(UserMapper userMapper, PasswordEncoder passwordEncoder,
+                           RoleService roleService, AuthService authService,
+                           CaptchaService captchaService, EmailCodeService emailCodeService,
+<span class="nc" id="L43">                           AuthProperties authProperties, AuthUserCacheInvalidator authUserCacheInvalidator) {</span>
+<span class="nc" id="L44">        this.userMapper = userMapper;</span>
+<span class="nc" id="L45">        this.passwordEncoder = passwordEncoder;</span>
+<span class="nc" id="L46">        this.roleService = roleService;</span>
+<span class="nc" id="L47">        this.authService = authService;</span>
+<span class="nc" id="L48">        this.captchaService = captchaService;</span>
+<span class="nc" id="L49">        this.emailCodeService = emailCodeService;</span>
+<span class="nc" id="L50">        this.authProperties = authProperties;</span>
+<span class="nc" id="L51">        this.authUserCacheInvalidator = authUserCacheInvalidator;</span>
+<span class="nc" id="L52">    }</span>
+
+    public void sendRegisterCode(SendRegisterCodeDTO dto, String clientIp) {
+<span class="nc" id="L55">        ensureRegistrationEnabled();</span>
+<span class="nc" id="L56">        captchaService.verifyAndConsume(dto.getCaptchaId(), dto.getCaptchaCode());</span>
+<span class="nc" id="L57">        UserEntity existing = findByEmail(dto.getEmail());</span>
+<span class="nc bnc" id="L58" title="All 2 branches missed.">        if (existing == null) {</span>
+<span class="nc" id="L59">            emailCodeService.sendCode(dto.getEmail(), EmailCodeService.Purpose.REGISTER, clientIp);</span>
+        } else {
+<span class="nc" id="L61">            emailCodeService.recordSendAttempt(dto.getEmail(), EmailCodeService.Purpose.REGISTER, clientIp);</span>
+        }
+<span class="nc" id="L63">    }</span>
+
+    @Transactional
+    public AuthVO register(RegisterDTO dto) {
+<span class="nc" id="L67">        ensureRegistrationEnabled();</span>
+<span class="nc" id="L68">        captchaService.verifyAndConsume(dto.getCaptchaId(), dto.getCaptchaCode());</span>
+<span class="nc" id="L69">        validateUsername(dto.getUsername());</span>
+<span class="nc" id="L70">        validatePassword(dto.getPassword());</span>
+<span class="nc" id="L71">        ensureEmailAvailable(dto.getEmail());</span>
+<span class="nc" id="L72">        ensureUsernameAvailable(dto.getUsername());</span>
+<span class="nc" id="L73">        emailCodeService.verifyAndConsume(dto.getEmail(), EmailCodeService.Purpose.REGISTER, dto.getEmailCode());</span>
+
+<span class="nc" id="L75">        UserEntity user = new UserEntity();</span>
+<span class="nc" id="L76">        user.setUsername(dto.getUsername().trim());</span>
+<span class="nc" id="L77">        user.setDisplayName(dto.getUsername().trim());</span>
+<span class="nc" id="L78">        user.setEmail(dto.getEmail().trim().toLowerCase());</span>
+<span class="nc" id="L79">        user.setEmailVerified(true);</span>
+<span class="nc" id="L80">        user.setPasswordHash(passwordEncoder.encode(dto.getPassword()));</span>
+<span class="nc" id="L81">        user.setStatus(&quot;active&quot;);</span>
+<span class="nc" id="L82">        user.setTokenVersion(0);</span>
+<span class="nc" id="L83">        user.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L84">        user.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L85">        user.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L86">        user.setLastLoginAt(LocalDateTime.now());</span>
+<span class="nc" id="L87">        userMapper.insert(user);</span>
+
+<span class="nc" id="L89">        roleService.ensureRole(&quot;USER&quot;, &quot;注册用户&quot;);</span>
+<span class="nc" id="L90">        roleService.assignRole(user.getId(), &quot;USER&quot;);</span>
+
+<span class="nc" id="L92">        return authService.buildAuthForUser(user);</span>
+    }
+
+    public void sendResetCode(SendResetCodeDTO dto, String clientIp) {
+<span class="nc" id="L96">        captchaService.verifyAndConsume(dto.getCaptchaId(), dto.getCaptchaCode());</span>
+<span class="nc" id="L97">        UserEntity user = findByEmail(dto.getEmail());</span>
+<span class="nc bnc" id="L98" title="All 2 branches missed.">        if (user != null) {</span>
+<span class="nc" id="L99">            emailCodeService.sendCode(dto.getEmail(), EmailCodeService.Purpose.RESET_PASSWORD, clientIp);</span>
+        } else {
+<span class="nc" id="L101">            emailCodeService.recordSendAttempt(dto.getEmail(), EmailCodeService.Purpose.RESET_PASSWORD, clientIp);</span>
+        }
+<span class="nc" id="L103">    }</span>
+
+    @Transactional
+    public void resetPassword(ResetPasswordDTO dto) {
+<span class="nc" id="L107">        validatePassword(dto.getNewPassword());</span>
+<span class="nc" id="L108">        UserEntity user = findByEmail(dto.getEmail());</span>
+<span class="nc bnc" id="L109" title="All 4 branches missed.">        if (user == null || user.getDeletedAt() != null) {</span>
+<span class="nc" id="L110">            throw new BusinessException(ErrorCodes.INVALID_CODE, &quot;验证码错误或已过期&quot;);</span>
+        }
+<span class="nc" id="L112">        emailCodeService.verifyAndConsume(dto.getEmail(), EmailCodeService.Purpose.RESET_PASSWORD, dto.getEmailCode());</span>
+
+<span class="nc" id="L114">        user.setPasswordHash(passwordEncoder.encode(dto.getNewPassword()));</span>
+<span class="nc bnc" id="L115" title="All 2 branches missed.">        user.setTokenVersion(user.getTokenVersion() == null ? 1 : user.getTokenVersion() + 1);</span>
+<span class="nc" id="L116">        user.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L117">        userMapper.updateById(user);</span>
+<span class="nc" id="L118">        authUserCacheInvalidator.evictAfterCommit(user.getId());</span>
+<span class="nc" id="L119">    }</span>
+
+    private void ensureRegistrationEnabled() {
+<span class="nc bnc" id="L122" title="All 2 branches missed.">        if (!authProperties.isRegistrationEnabled()) {</span>
+<span class="nc" id="L123">            throw new ValidationException(&quot;注册功能未开放&quot;);</span>
+        }
+<span class="nc" id="L125">    }</span>
+
+    private void validateUsername(String username) {
+<span class="nc bnc" id="L128" title="All 4 branches missed.">        if (username == null || !USERNAME_PATTERN.matcher(username.trim()).matches()) {</span>
+<span class="nc" id="L129">            throw new ValidationException(&quot;用户名需为 3-32 位字母、数字或下划线&quot;);</span>
+        }
+<span class="nc" id="L131">    }</span>
+
+    private void validatePassword(String password) {
+<span class="nc bnc" id="L134" title="All 4 branches missed.">        if (password == null || !PASSWORD_PATTERN.matcher(password).matches()) {</span>
+<span class="nc" id="L135">            throw new BusinessException(ErrorCodes.WEAK_PASSWORD, &quot;密码至少 8 位且包含字母和数字&quot;);</span>
+        }
+<span class="nc" id="L137">    }</span>
+
+    private void ensureEmailAvailable(String email) {
+<span class="nc" id="L140">        UserEntity existing = findByEmail(email);</span>
+<span class="nc bnc" id="L141" title="All 4 branches missed.">        if (existing != null &amp;&amp; existing.getDeletedAt() == null) {</span>
+<span class="nc" id="L142">            throw new ConflictException(&quot;邮箱已被注册&quot;);</span>
+        }
+<span class="nc" id="L144">    }</span>
+
+    private void ensureUsernameAvailable(String username) {
+<span class="nc" id="L147">        UserEntity existing = userMapper.selectOne(new LambdaQueryWrapper&lt;UserEntity&gt;()</span>
+<span class="nc" id="L148">                .eq(UserEntity::getUsername, username.trim())</span>
+<span class="nc" id="L149">                .isNull(UserEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L150" title="All 2 branches missed.">        if (existing != null) {</span>
+<span class="nc" id="L151">            throw new ConflictException(&quot;用户名已被占用&quot;);</span>
+        }
+<span class="nc" id="L153">    }</span>
+
+    private UserEntity findByEmail(String email) {
+<span class="nc" id="L156">        return userMapper.selectOne(new LambdaQueryWrapper&lt;UserEntity&gt;()</span>
+<span class="nc" id="L157">                .eq(UserEntity::getEmail, email.trim().toLowerCase())</span>
+<span class="nc" id="L158">                .isNull(UserEntity::getDeletedAt));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

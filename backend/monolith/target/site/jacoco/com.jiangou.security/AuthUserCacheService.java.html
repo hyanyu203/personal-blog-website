@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthUserCacheService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.security</a> &gt; <span class="el_source">AuthUserCacheService.java</span></div><h1>AuthUserCacheService.java</h1><pre class="source lang-java linenums">package com.jiangou.security;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jiangou.user.entity.UserEntity;
+import com.jiangou.user.mapper.UserMapper;
+import com.jiangou.user.service.RoleService;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+@Service
+public class AuthUserCacheService {
+
+    private static final String PREFIX = &quot;auth:userdetails:&quot;;
+    private static final String INDEX_PREFIX = &quot;auth:userdetails:index:&quot;;
+    private static final long TTL_MINUTES = 5;
+
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+    private final UserMapper userMapper;
+    private final RoleService roleService;
+
+    public AuthUserCacheService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
+<span class="nc" id="L33">                                UserMapper userMapper, RoleService roleService) {</span>
+<span class="nc" id="L34">        this.redisTemplate = redisTemplate;</span>
+<span class="nc" id="L35">        this.objectMapper = objectMapper;</span>
+<span class="nc" id="L36">        this.userMapper = userMapper;</span>
+<span class="nc" id="L37">        this.roleService = roleService;</span>
+<span class="nc" id="L38">    }</span>
+
+    public UserDetails loadUserById(Long userId, int tokenVersion) {
+<span class="nc" id="L41">        String key = PREFIX + userId + &quot;:&quot; + tokenVersion;</span>
+<span class="nc" id="L42">        String cached = redisTemplate.opsForValue().get(key);</span>
+<span class="nc bnc" id="L43" title="All 2 branches missed.">        if (cached != null) {</span>
+            try {
+<span class="nc" id="L45">                return fromJson(cached);</span>
+<span class="nc" id="L46">            } catch (JsonProcessingException ignored) {</span>
+<span class="nc" id="L47">                redisTemplate.delete(key);</span>
+            }
+        }
+<span class="nc" id="L50">        UserEntity entity = userMapper.selectById(userId);</span>
+<span class="nc bnc" id="L51" title="All 4 branches missed.">        if (entity == null || entity.getDeletedAt() != null) {</span>
+<span class="nc" id="L52">            return null;</span>
+        }
+<span class="nc bnc" id="L54" title="All 2 branches missed.">        int userVersion = entity.getTokenVersion() == null ? 0 : entity.getTokenVersion();</span>
+<span class="nc bnc" id="L55" title="All 2 branches missed.">        if (userVersion != tokenVersion) {</span>
+<span class="nc" id="L56">            return null;</span>
+        }
+<span class="nc" id="L58">        UserDetails details = toUserDetails(entity);</span>
+        try {
+<span class="nc" id="L60">            redisTemplate.opsForValue().set(key, toJson(details), TTL_MINUTES, TimeUnit.MINUTES);</span>
+<span class="nc" id="L61">            String indexKey = INDEX_PREFIX + userId;</span>
+<span class="nc" id="L62">            redisTemplate.opsForSet().add(indexKey, key);</span>
+<span class="nc" id="L63">            redisTemplate.expire(indexKey, TTL_MINUTES, TimeUnit.MINUTES);</span>
+<span class="nc" id="L64">        } catch (JsonProcessingException ignored) {</span>
+            // skip cache write
+<span class="nc" id="L66">        }</span>
+<span class="nc" id="L67">        return details;</span>
+    }
+
+    public void evict(Long userId) {
+<span class="nc bnc" id="L71" title="All 2 branches missed.">        if (userId == null) {</span>
+<span class="nc" id="L72">            return;</span>
+        }
+<span class="nc" id="L74">        String indexKey = INDEX_PREFIX + userId;</span>
+        try {
+<span class="nc" id="L76">            Set&lt;String&gt; keys = redisTemplate.opsForSet().members(indexKey);</span>
+<span class="nc bnc" id="L77" title="All 4 branches missed.">            if (keys != null &amp;&amp; !keys.isEmpty()) {</span>
+<span class="nc" id="L78">                redisTemplate.delete(keys);</span>
+            }
+<span class="nc" id="L80">            redisTemplate.delete(indexKey);</span>
+<span class="nc" id="L81">        } catch (Exception ignored) {</span>
+            // best-effort; entries still expire via TTL
+<span class="nc" id="L83">        }</span>
+<span class="nc" id="L84">    }</span>
+
+    private UserDetails toUserDetails(UserEntity entity) {
+<span class="nc" id="L87">        List&lt;String&gt; roles = roleService.getRoleCodes(entity.getId());</span>
+<span class="nc" id="L88">        List&lt;String&gt; permissions = roleService.getPermissionCodes(entity.getId());</span>
+<span class="nc" id="L89">        List&lt;SimpleGrantedAuthority&gt; authorities = new ArrayList&lt;&gt;(roles.stream()</span>
+<span class="nc" id="L90">                .map(code -&gt; new SimpleGrantedAuthority(&quot;ROLE_&quot; + code.toUpperCase()))</span>
+<span class="nc" id="L91">                .collect(Collectors.toList()));</span>
+<span class="nc" id="L92">        permissions.stream()</span>
+<span class="nc" id="L93">                .map(SimpleGrantedAuthority::new)</span>
+<span class="nc" id="L94">                .forEach(authorities::add);</span>
+<span class="nc" id="L95">        return new User(entity.getUsername(),</span>
+<span class="nc bnc" id="L96" title="All 2 branches missed.">                entity.getPasswordHash() == null ? &quot;&quot; : entity.getPasswordHash(),</span>
+<span class="nc" id="L97">                &quot;active&quot;.equals(entity.getStatus()),</span>
+                true, true, true,
+                authorities);
+    }
+
+    private String toJson(UserDetails details) throws JsonProcessingException {
+<span class="nc" id="L103">        CachedUser cached = new CachedUser();</span>
+<span class="nc" id="L104">        cached.username = details.getUsername();</span>
+<span class="nc" id="L105">        cached.password = &quot;&quot;;</span>
+<span class="nc" id="L106">        cached.enabled = details.isEnabled();</span>
+<span class="nc" id="L107">        cached.authorities = details.getAuthorities().stream()</span>
+<span class="nc" id="L108">                .map(a -&gt; a.getAuthority())</span>
+<span class="nc" id="L109">                .collect(Collectors.toList());</span>
+<span class="nc" id="L110">        return objectMapper.writeValueAsString(cached);</span>
+    }
+
+    private UserDetails fromJson(String json) throws JsonProcessingException {
+<span class="nc" id="L114">        CachedUser cached = objectMapper.readValue(json, CachedUser.class);</span>
+<span class="nc" id="L115">        List&lt;SimpleGrantedAuthority&gt; authorities = cached.authorities.stream()</span>
+<span class="nc" id="L116">                .map(SimpleGrantedAuthority::new)</span>
+<span class="nc" id="L117">                .collect(Collectors.toList());</span>
+<span class="nc" id="L118">        return new User(cached.username, cached.password, cached.enabled,</span>
+                true, true, true, authorities);
+    }
+
+    private static class CachedUser {
+        public String username;
+        public String password;
+        public boolean enabled;
+        public List&lt;String&gt; authorities;
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

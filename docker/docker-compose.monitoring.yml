@@ -1,0 +1,13 @@
+# 与 docker-compose.prod.yml 叠加（共享 jiangou 网络）
+# docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml --profile monitoring up -d
+
+services:
+  prometheus:
+    extends:
+      file: docker-compose.prod.yml
+      service: prometheus
+
+  grafana:
+    extends:
+      file: docker-compose.prod.yml
+      service: grafana

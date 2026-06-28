@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SecurityUserDetailsService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.security</a> &gt; <span class="el_source">SecurityUserDetailsService.java</span></div><h1>SecurityUserDetailsService.java</h1><pre class="source lang-java linenums">package com.jiangou.security;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.jiangou.common.exception.NotFoundException;
+import com.jiangou.user.entity.UserEntity;
+import com.jiangou.user.mapper.UserMapper;
+import com.jiangou.user.service.RoleService;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class SecurityUserDetailsService implements UserDetailsService {
+
+    private final UserMapper userMapper;
+    private final RoleService roleService;
+
+<span class="nc" id="L25">    public SecurityUserDetailsService(UserMapper userMapper, RoleService roleService) {</span>
+<span class="nc" id="L26">        this.userMapper = userMapper;</span>
+<span class="nc" id="L27">        this.roleService = roleService;</span>
+<span class="nc" id="L28">    }</span>
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+<span class="nc" id="L32">        UserEntity entity = userMapper.selectOne(new LambdaQueryWrapper&lt;UserEntity&gt;()</span>
+<span class="nc" id="L33">                .eq(UserEntity::getUsername, username)</span>
+<span class="nc" id="L34">                .isNull(UserEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L35" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L36">            throw new UsernameNotFoundException(&quot;用户不存在&quot;);</span>
+        }
+<span class="nc" id="L38">        return toUserDetails(entity);</span>
+    }
+
+    public UserDetails loadUserById(Long userId) {
+<span class="nc" id="L42">        UserEntity entity = userMapper.selectOne(new LambdaQueryWrapper&lt;UserEntity&gt;()</span>
+<span class="nc" id="L43">                .eq(UserEntity::getId, userId)</span>
+<span class="nc" id="L44">                .isNull(UserEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L45" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L46">            throw new NotFoundException(&quot;用户不存在&quot;);</span>
+        }
+<span class="nc" id="L48">        return toUserDetails(entity);</span>
+    }
+
+    public Long resolveUserId(String username) {
+<span class="nc" id="L52">        UserEntity entity = userMapper.selectOne(new LambdaQueryWrapper&lt;UserEntity&gt;()</span>
+<span class="nc" id="L53">                .eq(UserEntity::getUsername, username)</span>
+<span class="nc" id="L54">                .isNull(UserEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L55" title="All 2 branches missed.">        return entity != null ? entity.getId() : null;</span>
+    }
+
+    private UserDetails toUserDetails(UserEntity entity) {
+<span class="nc" id="L59">        List&lt;String&gt; roles = roleService.getRoleCodes(entity.getId());</span>
+<span class="nc" id="L60">        List&lt;String&gt; permissions = roleService.getPermissionCodes(entity.getId());</span>
+<span class="nc" id="L61">        List&lt;SimpleGrantedAuthority&gt; authorities = new ArrayList&lt;&gt;(roles.stream()</span>
+<span class="nc" id="L62">                .map(code -&gt; new SimpleGrantedAuthority(&quot;ROLE_&quot; + code.toUpperCase()))</span>
+<span class="nc" id="L63">                .collect(Collectors.toList()));</span>
+<span class="nc" id="L64">        permissions.stream()</span>
+<span class="nc" id="L65">                .map(SimpleGrantedAuthority::new)</span>
+<span class="nc" id="L66">                .forEach(authorities::add);</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">        return new User(entity.getUsername(), entity.getPasswordHash() == null ? &quot;&quot; : entity.getPasswordHash(),</span>
+<span class="nc" id="L68">                &quot;active&quot;.equals(entity.getStatus()),</span>
+                true, true, true,
+                authorities);
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

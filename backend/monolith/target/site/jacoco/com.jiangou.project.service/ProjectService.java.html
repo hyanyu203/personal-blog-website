@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="zh"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ProjectService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">jiangou</a> &gt; <a href="index.source.html" class="el_package">com.jiangou.project.service</a> &gt; <span class="el_source">ProjectService.java</span></div><h1>ProjectService.java</h1><pre class="source lang-java linenums">package com.jiangou.project.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.jiangou.common.exception.NotFoundException;
+import com.jiangou.common.exception.ValidationException;
+import com.jiangou.common.result.PageResult;
+import com.jiangou.project.dto.ProjectDTO;
+import com.jiangou.project.entity.ProjectEntity;
+import com.jiangou.project.mapper.ProjectMapper;
+import com.jiangou.project.vo.ProjectVO;
+import com.jiangou.search.service.SearchIndexService;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class ProjectService {
+
+    private final ProjectMapper projectMapper;
+    private final GitHubSyncService gitHubSyncService;
+    private final SearchIndexService searchIndexService;
+
+    public ProjectService(ProjectMapper projectMapper, GitHubSyncService gitHubSyncService,
+<span class="nc" id="L29">                          SearchIndexService searchIndexService) {</span>
+<span class="nc" id="L30">        this.projectMapper = projectMapper;</span>
+<span class="nc" id="L31">        this.gitHubSyncService = gitHubSyncService;</span>
+<span class="nc" id="L32">        this.searchIndexService = searchIndexService;</span>
+<span class="nc" id="L33">    }</span>
+
+    public List&lt;ProjectVO&gt; listPublic() {
+<span class="nc" id="L36">        return projectMapper.selectList(new LambdaQueryWrapper&lt;ProjectEntity&gt;()</span>
+<span class="nc" id="L37">                        .isNull(ProjectEntity::getDeletedAt)</span>
+<span class="nc" id="L38">                        .orderByDesc(ProjectEntity::getPinned)</span>
+<span class="nc" id="L39">                        .orderByAsc(ProjectEntity::getSortOrder)</span>
+<span class="nc" id="L40">                        .orderByDesc(ProjectEntity::getStars))</span>
+<span class="nc" id="L41">                .stream().map(this::toVo).collect(Collectors.toList());</span>
+    }
+
+    public PageResult&lt;ProjectVO&gt; listAdmin(long page, long pageSize) {
+<span class="nc" id="L45">        Page&lt;ProjectEntity&gt; result = projectMapper.selectPage(new Page&lt;&gt;(page, pageSize),</span>
+                new LambdaQueryWrapper&lt;ProjectEntity&gt;()
+<span class="nc" id="L47">                        .isNull(ProjectEntity::getDeletedAt)</span>
+<span class="nc" id="L48">                        .orderByDesc(ProjectEntity::getUpdatedAt));</span>
+<span class="nc" id="L49">        List&lt;ProjectVO&gt; items = result.getRecords().stream().map(this::toVo).collect(Collectors.toList());</span>
+<span class="nc" id="L50">        return PageResult.of(items, result.getTotal(), page, pageSize);</span>
+    }
+
+    public ProjectVO getByOwnerRepo(String owner, String repo) {
+<span class="nc" id="L54">        ProjectEntity entity = projectMapper.selectOne(new LambdaQueryWrapper&lt;ProjectEntity&gt;()</span>
+<span class="nc" id="L55">                .eq(ProjectEntity::getOwner, owner).eq(ProjectEntity::getRepo, repo)</span>
+<span class="nc" id="L56">                .isNull(ProjectEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L57" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L58">            throw new NotFoundException(&quot;项目不存在&quot;);</span>
+        }
+<span class="nc" id="L60">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public ProjectVO create(ProjectDTO dto) {
+<span class="nc" id="L65">        ensureUnique(dto.getOwner(), dto.getRepo(), null);</span>
+<span class="nc" id="L66">        ProjectEntity entity = fromDto(dto);</span>
+<span class="nc" id="L67">        entity.setGithubUrl(&quot;https://github.com/&quot; + dto.getOwner() + &quot;/&quot; + dto.getRepo());</span>
+<span class="nc" id="L68">        entity.setSyncStatus(&quot;ok&quot;);</span>
+<span class="nc" id="L69">        entity.setStars(0);</span>
+<span class="nc" id="L70">        entity.setForks(0);</span>
+<span class="nc" id="L71">        entity.setOpenIssues(0);</span>
+<span class="nc" id="L72">        entity.setMetadata(&quot;{}&quot;);</span>
+<span class="nc" id="L73">        entity.setCreatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L74">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L75">        projectMapper.insert(entity);</span>
+<span class="nc" id="L76">        searchIndexService.syncProject(entity);</span>
+<span class="nc" id="L77">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public ProjectVO update(Long id, ProjectDTO dto) {
+<span class="nc" id="L82">        ProjectEntity entity = findActive(id);</span>
+<span class="nc bnc" id="L83" title="All 2 branches missed.">        if (StringUtils.hasText(dto.getName())) {</span>
+<span class="nc" id="L84">            entity.setName(dto.getName());</span>
+        }
+<span class="nc bnc" id="L86" title="All 2 branches missed.">        if (dto.getDescription() != null) {</span>
+<span class="nc" id="L87">            entity.setDescription(dto.getDescription());</span>
+        }
+<span class="nc bnc" id="L89" title="All 2 branches missed.">        if (dto.getHomepageUrl() != null) {</span>
+<span class="nc" id="L90">            entity.setHomepageUrl(dto.getHomepageUrl());</span>
+        }
+<span class="nc bnc" id="L92" title="All 2 branches missed.">        if (dto.getPinned() != null) {</span>
+<span class="nc" id="L93">            entity.setPinned(dto.getPinned());</span>
+        }
+<span class="nc bnc" id="L95" title="All 2 branches missed.">        if (dto.getSortOrder() != null) {</span>
+<span class="nc" id="L96">            entity.setSortOrder(dto.getSortOrder());</span>
+        }
+<span class="nc" id="L98">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L99">        projectMapper.updateById(entity);</span>
+<span class="nc" id="L100">        searchIndexService.syncProject(entity);</span>
+<span class="nc" id="L101">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public void delete(Long id) {
+<span class="nc" id="L106">        ProjectEntity entity = findActive(id);</span>
+<span class="nc" id="L107">        entity.setDeletedAt(LocalDateTime.now());</span>
+<span class="nc" id="L108">        projectMapper.updateById(entity);</span>
+<span class="nc" id="L109">        searchIndexService.syncProject(entity);</span>
+<span class="nc" id="L110">    }</span>
+
+    @Transactional
+    public ProjectVO syncOne(Long id) {
+<span class="nc" id="L114">        ProjectEntity entity = findActive(id);</span>
+<span class="nc" id="L115">        gitHubSyncService.syncProject(entity);</span>
+<span class="nc" id="L116">        entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L117">        projectMapper.updateById(entity);</span>
+<span class="nc" id="L118">        searchIndexService.syncProject(entity);</span>
+<span class="nc" id="L119">        return toVo(entity);</span>
+    }
+
+    @Transactional
+    public int syncAll() {
+<span class="nc" id="L124">        List&lt;ProjectEntity&gt; all = projectMapper.selectList(new LambdaQueryWrapper&lt;ProjectEntity&gt;()</span>
+<span class="nc" id="L125">                .isNull(ProjectEntity::getDeletedAt));</span>
+<span class="nc" id="L126">        int ok = 0;</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">        for (ProjectEntity entity : all) {</span>
+<span class="nc bnc" id="L128" title="All 2 branches missed.">            if (gitHubSyncService.syncProject(entity)) {</span>
+<span class="nc" id="L129">                ok++;</span>
+            }
+<span class="nc" id="L131">            entity.setUpdatedAt(LocalDateTime.now());</span>
+<span class="nc" id="L132">            projectMapper.updateById(entity);</span>
+<span class="nc" id="L133">            searchIndexService.syncProject(entity);</span>
+<span class="nc" id="L134">        }</span>
+<span class="nc" id="L135">        return ok;</span>
+    }
+
+    private ProjectEntity fromDto(ProjectDTO dto) {
+<span class="nc" id="L139">        ProjectEntity entity = new ProjectEntity();</span>
+<span class="nc" id="L140">        entity.setOwner(dto.getOwner());</span>
+<span class="nc" id="L141">        entity.setRepo(dto.getRepo());</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        entity.setName(dto.getName() == null ? dto.getRepo() : dto.getName());</span>
+<span class="nc" id="L143">        entity.setDescription(dto.getDescription());</span>
+<span class="nc" id="L144">        entity.setHomepageUrl(dto.getHomepageUrl());</span>
+<span class="nc" id="L145">        entity.setPinned(Boolean.TRUE.equals(dto.getPinned()));</span>
+<span class="nc bnc" id="L146" title="All 2 branches missed.">        entity.setSortOrder(dto.getSortOrder() == null ? 0 : dto.getSortOrder());</span>
+<span class="nc" id="L147">        return entity;</span>
+    }
+
+    private void ensureUnique(String owner, String repo, Long excludeId) {
+<span class="nc" id="L151">        LambdaQueryWrapper&lt;ProjectEntity&gt; w = new LambdaQueryWrapper&lt;ProjectEntity&gt;()</span>
+<span class="nc" id="L152">                .eq(ProjectEntity::getOwner, owner).eq(ProjectEntity::getRepo, repo)</span>
+<span class="nc" id="L153">                .isNull(ProjectEntity::getDeletedAt);</span>
+<span class="nc bnc" id="L154" title="All 2 branches missed.">        if (excludeId != null) {</span>
+<span class="nc" id="L155">            w.ne(ProjectEntity::getId, excludeId);</span>
+        }
+<span class="nc bnc" id="L157" title="All 2 branches missed.">        if (projectMapper.selectCount(w) &gt; 0) {</span>
+<span class="nc" id="L158">            throw new ValidationException(&quot;项目已存在&quot;);</span>
+        }
+<span class="nc" id="L160">    }</span>
+
+    private ProjectEntity findActive(Long id) {
+<span class="nc" id="L163">        ProjectEntity entity = projectMapper.selectOne(new LambdaQueryWrapper&lt;ProjectEntity&gt;()</span>
+<span class="nc" id="L164">                .eq(ProjectEntity::getId, id).isNull(ProjectEntity::getDeletedAt));</span>
+<span class="nc bnc" id="L165" title="All 2 branches missed.">        if (entity == null) {</span>
+<span class="nc" id="L166">            throw new NotFoundException(&quot;项目不存在&quot;);</span>
+        }
+<span class="nc" id="L168">        return entity;</span>
+    }
+
+    private ProjectVO toVo(ProjectEntity e) {
+<span class="nc" id="L172">        return ProjectVO.builder()</span>
+<span class="nc" id="L173">                .id(e.getId()).owner(e.getOwner()).repo(e.getRepo())</span>
+<span class="nc" id="L174">                .name(e.getName()).description(e.getDescription())</span>
+<span class="nc" id="L175">                .homepageUrl(e.getHomepageUrl()).githubUrl(e.getGithubUrl())</span>
+<span class="nc" id="L176">                .language(e.getLanguage()).stars(e.getStars()).forks(e.getForks())</span>
+<span class="nc" id="L177">                .openIssues(e.getOpenIssues()).license(e.getLicense())</span>
+<span class="nc" id="L178">                .pushedAt(e.getPushedAt()).syncStatus(e.getSyncStatus())</span>
+<span class="nc" id="L179">                .pinned(e.getPinned()).build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
